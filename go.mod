@@ -3,6 +3,7 @@ module github.com/unravelin/terraform-provider-ravelin
 go 1.17
 
 require (
+	github.com/google/go-cmp v0.5.6
 	github.com/hashicorp/terraform-plugin-sdk/v2 v2.8.0
 	google.golang.org/api v0.57.0
 )
