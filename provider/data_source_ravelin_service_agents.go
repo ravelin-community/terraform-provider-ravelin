@@ -82,7 +82,7 @@ func filterPolicy(policy *cloudresourcemanager.Policy, ProjectNumber string) (ma
 	// extra domains that don't follow the gcp-sa regex above
 	// haven't found an elegant way to keep this up to date with google
 	serviceAgentDomains := []string{
-		"gae-api-prod.google.com",
+		"gae-api-prod",
 		"gcp-gae-service",
 		"cloudcomposer-accounts",
 		"dlp-api",
@@ -97,15 +97,18 @@ func filterPolicy(policy *cloudresourcemanager.Policy, ProjectNumber string) (ma
 		"firebase-rules",
 		"dataproc-accounts",
 		"gcf-admin-robot",
-		"cloud-ml.google.com",
+		"cloud-ml",
 		"serverless-robot-prod",
 		"containerregistry",
-		"genomics-api.google.com",
+		"genomics-api",
 		"container-engine-robot",
 		"remotebuildexecution",
 		"service-consumer-management",
 		"service-networking",
 		"cloud-tpu",
+		"cloudservices",
+		"repo",
+		"cloudbuild",
 	}
 
 	// map that will contain all the service agents
@@ -124,7 +127,7 @@ func filterPolicy(policy *cloudresourcemanager.Policy, ProjectNumber string) (ma
 			}
 
 			// fetching domain of the service account
-			domain := strings.TrimSuffix(strings.Split(member, "@")[1], ".iam.gserviceaccount.com")
+			domain := strings.Split(strings.Split(member, "@")[1], ".")[0]
 
 			// either domain matches regex
 			if r.MatchString(domain) {
