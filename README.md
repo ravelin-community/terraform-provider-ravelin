@@ -12,8 +12,8 @@ Miscellaneous resources and operations we couldn't do natively in terraform.
 terraform {
   required_providers {
     ravelin = {
-      source  = "unravelin/ravelin"
-      version = "0.0.1"
+      source  = "unravelin-terraform/ravelin"
+      version = "1.0.0"
     }
   }
 }
