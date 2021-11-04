@@ -1,6 +1,6 @@
 TEST?=$$(go list ./... | grep -v 'vendor')
 HOSTNAME=registry.terraform.io
-NAMESPACE=unravelin-terraform
+NAMESPACE=ravelin-community
 NAME=ravelin
 BINARY=terraform-provider-${NAME}
 VERSION=0.0.1

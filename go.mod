@@ -1,4 +1,4 @@
-module github.com/unravelin-terraform/terraform-provider-ravelin
+module github.com/ravelin-community/terraform-provider-ravelin
 
 go 1.17
 

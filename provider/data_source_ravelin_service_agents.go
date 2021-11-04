@@ -10,7 +10,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-	"github.com/unravelin-terraform/terraform-provider-ravelin/google"
+	"github.com/ravelin-community/terraform-provider-ravelin/google"
 	"google.golang.org/api/cloudresourcemanager/v1"
 )
 
