@@ -108,7 +108,6 @@ func filterPolicy(policy *cloudresourcemanager.Policy, ProjectNumber string) (ma
 		"cloud-tpu",
 		"cloudservices",
 		"repo",
-		"cloudbuild",
 	}
 
 	// map that will contain all the service agents
