@@ -110,6 +110,11 @@ func filterPolicy(policy *cloudresourcemanager.Policy, ProjectNumber string) (ma
 		"repo",
 	}
 
+	// for some extra domains we want to ignore a combination of service agent and role
+	serviceAgentRoles := map[string]string{
+		"cloudbuild": "roles/cloudbuild.builds.builder",
+	}
+
 	// map that will contain all the service agents
 	serviceAgents := map[string][]string{}
 
@@ -137,6 +142,13 @@ func filterPolicy(policy *cloudresourcemanager.Policy, ProjectNumber string) (ma
 			// or domain is in serviceAgentDomains
 			for _, v := range serviceAgentDomains {
 				if v == domain {
+					serviceAgents[b.Role] = append(serviceAgents[b.Role], member)
+					continue
+				}
+			}
+
+			for k, v := range serviceAgentRoles {
+				if k == domain && b.Role == v {
 					serviceAgents[b.Role] = append(serviceAgents[b.Role], member)
 					continue
 				}
