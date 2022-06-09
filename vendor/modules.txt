@@ -123,10 +123,6 @@ github.com/mitchellh/reflectwalk
 # github.com/oklog/run v1.0.0
 ## explicit
 github.com/oklog/run
-# github.com/unravelin/terraform-provider-ravelin v1.0.0
-## explicit; go 1.17
-github.com/unravelin/terraform-provider-ravelin/google
-github.com/unravelin/terraform-provider-ravelin/provider
 # github.com/vmihailenco/msgpack v4.0.4+incompatible
 ## explicit
 github.com/vmihailenco/msgpack

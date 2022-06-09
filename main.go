@@ -2,7 +2,7 @@ package main
 
 import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/plugin"
-	provider "github.com/unravelin/terraform-provider-ravelin/provider"
+	provider "github.com/ravelin-community/terraform-provider-ravelin/provider"
 )
 
 func main() {
