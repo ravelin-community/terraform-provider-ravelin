@@ -80,6 +80,19 @@ func TestFilterPolicy(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "check cloudbuild is not included",
+			inputPolicy: &cloudresourcemanager.Policy{
+				Bindings: []*cloudresourcemanager.Binding{
+					{
+						Role:    "roles/editor",
+						Members: []string{"serviceAccount:239645365406@cloudbuild.gserviceaccount.com"},
+					},
+				},
+			},
+			projectNumber: "239645365406",
+			outputPolicy:  map[string][]string{},
+		},
 	}
 
 	for _, tt := range tests {
