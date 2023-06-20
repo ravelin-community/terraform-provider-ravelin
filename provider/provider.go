@@ -11,5 +11,8 @@ func Provider() *schema.Provider {
 		DataSourcesMap: map[string]*schema.Resource{
 			"ravelin_service_agents": dataSourceServiceAgents(),
 		},
+		ResourcesMap: map[string]*schema.Resource{
+			"ravelin_imagesync": imagesync(),
+		},
 	}
 }
