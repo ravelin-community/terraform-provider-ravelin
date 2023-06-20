@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/empty"
@@ -50,7 +51,8 @@ func imagesync() *schema.Resource {
 
 func imagesyncCreate(d *schema.ResourceData, m interface{}) error {
 	src := d.Get("source").(string)
-	srcImg, exists, err := getRemoteImage(src)
+
+	srcImg, exists, err := getRemoteImage(src, authn.Anonymous)
 	if err != nil {
 		return err
 	}
@@ -68,9 +70,8 @@ func imagesyncCreate(d *schema.ResourceData, m interface{}) error {
 	if err != nil {
 		return err
 	}
-	authOpt := remote.WithAuth(googleAuth)
 
-	if err := remote.Write(destRef, srcImg, authOpt); err != nil {
+	if err := remote.Write(destRef, srcImg, remote.WithAuth(googleAuth)); err != nil {
 		return err
 	}
 
@@ -85,7 +86,13 @@ func imagesyncUpdate(d *schema.ResourceData, m interface{}) error {
 
 func imagesyncRead(d *schema.ResourceData, meta interface{}) error {
 	dest := d.Get("destination").(string)
-	destImg, exists, err := getRemoteImage(dest)
+
+	googleAuth, err := google.NewEnvAuthenticator()
+	if err != nil {
+		return err
+	}
+
+	destImg, exists, err := getRemoteImage(dest, googleAuth)
 	if err != nil {
 		return err
 	}
@@ -169,7 +176,7 @@ func sourceChangedDiffFunc(ctx context.Context, d *schema.ResourceDiff, v interf
 	// If the first 2 are true, the digest will change, and so 'ForceNew' will be triggered,
 	// If the image digest remains the same, then the resource will not be marked for update
 	src := d.Get("source").(string)
-	srcImg, exists, err := getRemoteImage(src)
+	srcImg, exists, err := getRemoteImage(src, authn.Anonymous)
 	if err != nil {
 		return err
 	}
@@ -190,19 +197,13 @@ func sourceChangedDiffFunc(ctx context.Context, d *schema.ResourceDiff, v interf
 	return nil
 }
 
-func getRemoteImage(url string) (v1.Image, bool, error) {
+func getRemoteImage(url string, auth authn.Authenticator) (v1.Image, bool, error) {
 	urlRef, err := name.ParseReference(url, name.WeakValidation)
 	if err != nil {
 		return empty.Image, false, err
 	}
 
-	googleAuth, err := google.NewEnvAuthenticator()
-	if err != nil {
-		return empty.Image, false, err
-	}
-	authOpt := remote.WithAuth(googleAuth)
-
-	i, err := remote.Image(urlRef, authOpt)
+	i, err := remote.Image(urlRef, remote.WithAuth(auth))
 	if err != nil {
 		if tErr, ok := (err).(*transport.Error); ok && tErr.StatusCode == 404 {
 			return empty.Image, false, nil
