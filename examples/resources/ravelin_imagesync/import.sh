@@ -1,0 +1,1 @@
+terraform import ravelin_imagesync.hello_world registry.hub.docker.com/library/hello-world:latest,europe-docker.pkg.dev/my-project/my-registry/dockerhub/hello-world:latest
