@@ -3,70 +3,98 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-	"github.com/ravelin-community/terraform-provider-ravelin/google"
+	"github.com/hashicorp/terraform-plugin-framework/datasource"
+	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/ravelin-community/terraform-provider-ravelin/internal/google"
+
 	"google.golang.org/api/cloudresourcemanager/v1"
 )
 
-func dataSourceServiceAgents() *schema.Resource {
-	return &schema.Resource{
-		ReadContext: dataSourceServiceAgentsRead,
-		Schema: map[string]*schema.Schema{
-			"project": {
-				Type:     schema.TypeString,
-				Required: true,
+var _ datasource.DataSource = &ServiceAgentsDataSource{}
+
+type ServiceAgentsDataSource struct{}
+
+type ServiceAgentsDataSourceModel struct {
+	Project            types.String `tfsdk:"project"`
+	ServiceAgentPolicy types.String `tfsdk:"service_agent_policy"`
+	Id                 types.String `tfsdk:"id"`
+}
+
+func (r *ServiceAgentsDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_service_agents"
+}
+
+func (r *ServiceAgentsDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
+	resp.Schema = schema.Schema{
+		Attributes: map[string]schema.Attribute{
+			"project": schema.StringAttribute{
+				MarkdownDescription: "Name of the GCP project to fetch service agents for",
+				Optional:            true,
 			},
-			"service_agent_policy": {
+			"service_agent_policy": schema.StringAttribute{
+				MarkdownDescription: "IAM policy JSON encoded as a string of all service agent bindings",
+				Computed:            true,
+			},
+			"id": schema.StringAttribute{
 				Computed: true,
-				Type:     schema.TypeString,
 			},
 		},
+		MarkdownDescription: "Get all service agents contained in a project level IAM policy.\n\n" +
+			"Use this data source to get all the google managed service accounts (service agents)" +
+			"that have role bindings in your project level IAM policy. These bindings can then be" +
+			"added to a `google_project_iam_policy` resource.",
 	}
 }
 
-func dataSourceServiceAgentsRead(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
-	// Warning or errors can be collected in a slice type
-	var diags diag.Diagnostics
-	var c google.Config
-	project := d.Get("project").(string)
+func (d *ServiceAgentsDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
+	var data ServiceAgentsDataSourceModel
 
-	// Initialising new client
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+
+	project := data.Project.ValueString()
+
+	var c google.Config
 	err := c.NewCloudResourceManagerService(ctx)
 	if err != nil {
-		return diag.FromErr(err)
+		resp.Diagnostics.AddError("error creating cloud resource manager client", err.Error())
+		return
 	}
 
 	// Fetching project policy data and project number
 	policy, err := c.GetProjectIAMPolicy(project)
 	if err != nil {
-		return diag.FromErr(err)
+		resp.Diagnostics.AddError(fmt.Sprintf("error fetching project policy %s", project), err.Error())
+		return
 	}
 	projectNumber, err := c.GetProjectIDNumber(project)
 	if err != nil {
-		return diag.FromErr(err)
+		resp.Diagnostics.AddError("error fetching project number", err.Error())
+		return
 	}
 
 	serviceAgents, err := filterPolicy(policy, projectNumber)
 	if err != nil {
-		return diag.FromErr(err)
+		resp.Diagnostics.AddError("error filtering policy", err.Error())
+		return
 	}
 
-	data, _ := json.Marshal(serviceAgents)
-
-	if err := d.Set("service_agent_policy", string(data)); err != nil {
-		return diag.FromErr(err)
+	serviceAgentPolicy, err := json.Marshal(serviceAgents)
+	if err != nil {
+		resp.Diagnostics.AddError("error encoding service agents to json", err.Error())
+		return
 	}
 
-	// always run
-	d.SetId(strconv.FormatInt(time.Now().Unix(), 10))
+	data.ServiceAgentPolicy = types.StringValue(string(serviceAgentPolicy))
+	data.Id = types.StringValue(strconv.FormatInt(time.Now().Unix(), 10))
 
-	return diags
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
 // extract all google managed service account (ie service agents) from the IAM policy
