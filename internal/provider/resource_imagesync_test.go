@@ -11,8 +11,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/random"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
 func TestImageSync(t *testing.T) {
@@ -52,10 +51,10 @@ func TestImageSync(t *testing.T) {
 	}
 
 	resource.Test(t, resource.TestCase{
-		IsUnitTest:   true,
-		PreCheck:     nil,
-		Providers:    map[string]*schema.Provider{"ravelin": Provider()},
-		CheckDestroy: nil,
+		IsUnitTest:               true,
+		PreCheck:                 nil,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		CheckDestroy:             nil,
 		Steps: []resource.TestStep{
 			{
 				// Create the resource, mirror the image to the dest registry, and correctly set the id (w/digest)

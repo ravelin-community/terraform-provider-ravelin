@@ -1,0 +1,33 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+{{ .Description | trimspace }}
+
+This data source is particularly useful when you don't want to manage google's
+service agents being added in your authoritative policies and take the risk of
+removing bindings which can break your cloud environment. This provides a way of
+ignoring these changes.
+
+-> **Note** On it's own this data is pretty useless, you need to combine these
+service agents with your own policy bindings and apply these changes through a
+`google_project_iam_policy` resource. See example below for more details.
+
+## Example Usage
+
+{{ tffile (printf "examples/data-sources/%s/data-source.tf" .Name)}}
+
+{{ .SchemaMarkdown | trimspace }}
+
+## Usage Notes
+
+**Service agents across different projects**
+
+The data resource will only return service agents intended to be used with your
+current project. All other service agents from different projects won't be added
+to the output if they are part of the project IAM policy.
