@@ -3,16 +3,15 @@ package provider
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"strings"
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
-	v1 "github.com/google/go-containerregistry/pkg/v1"
-	"github.com/google/go-containerregistry/pkg/v1/empty"
 	"github.com/google/go-containerregistry/pkg/v1/google"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
-	"github.com/google/go-containerregistry/pkg/v1/remote/transport"
+	"github.com/ravelin-community/terraform-provider-ravelin/internal/image"
+	"github.com/ravelin-community/terraform-provider-ravelin/internal/models"
+	"github.com/ravelin-community/terraform-provider-ravelin/internal/planmodifiers"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -26,16 +25,18 @@ var _ resource.Resource = &ImageSyncResource{}
 var _ resource.ResourceWithImportState = &ImageSyncResource{}
 
 func NewImageSyncResource() resource.Resource {
-	return &ImageSyncResource{}
+	googleAuth, err := google.NewEnvAuthenticator()
+	if err != nil {
+		panic(fmt.Errorf("failed to create google authenticator, %v", err.Error()))
+	}
+
+	return &ImageSyncResource{
+		auth: googleAuth,
+	}
 }
 
-type ImageSyncResource struct{}
-
-type ImageSyncResourceModel struct {
-	Source       types.String `tfsdk:"source"`
-	Destination  types.String `tfsdk:"destination"`
-	SourceDigest types.String `tfsdk:"source_digest"`
-	Id           types.String `tfsdk:"id"`
+type ImageSyncResource struct {
+	auth authn.Authenticator
 }
 
 func (r *ImageSyncResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -60,7 +61,7 @@ func (r *ImageSyncResource) Schema(ctx context.Context, req resource.SchemaReque
 				MarkdownDescription: "Digest of the source image; should always match the digest of the destination image",
 				Computed:            true,
 				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
+					planmodifiers.ImageDigestModifier(),
 				},
 			},
 			"id": schema.StringAttribute{
@@ -77,7 +78,7 @@ func (r *ImageSyncResource) Schema(ctx context.Context, req resource.SchemaReque
 }
 
 func (r *ImageSyncResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	var data ImageSyncResourceModel
+	var data models.ImageSyncResourceModel
 
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
 
@@ -85,17 +86,11 @@ func (r *ImageSyncResource) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
-	googleAuth, err := google.NewEnvAuthenticator()
-	if err != nil {
-		resp.Diagnostics.AddError("failed to create google authenticator", err.Error())
-		return
-	}
-
 	src := data.Source.ValueString()
 	dest := data.Destination.ValueString()
 
 	// getting source image
-	srcImg, exists, srcDigest, err := getRemoteImage(src, authn.Anonymous)
+	srcImg, exists, srcDigest, err := image.GetRemoteImage(src, authn.Anonymous)
 	switch {
 	case err != nil:
 		resp.Diagnostics.AddError("failed to get remote image", err.Error())
@@ -111,13 +106,13 @@ func (r *ImageSyncResource) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
-	if err := remote.Write(destRef, srcImg, remote.WithAuth(googleAuth)); err != nil {
+	if err := remote.Write(destRef, srcImg, remote.WithAuth(r.auth)); err != nil {
 		resp.Diagnostics.AddError("failed to write image", err.Error())
 		return
 	}
 
 	// get the image from registry to verify it was properly written
-	destImg, exists, destDigest, err := getRemoteImage(dest, googleAuth)
+	destImg, exists, destDigest, err := image.GetRemoteImage(dest, r.auth)
 	switch {
 	case err != nil:
 		resp.Diagnostics.AddError("failed to get registry image", err.Error())
@@ -129,7 +124,7 @@ func (r *ImageSyncResource) Create(ctx context.Context, req resource.CreateReque
 		resp.Diagnostics.AddError("image did not get synched properly", fmt.Sprintf("source and destination digests do not match: %s != %s", srcDigest, destDigest))
 	}
 
-	imgID, err := imageID(data.Destination.ValueString(), destImg)
+	imgID, err := image.ImageID(data.Destination.ValueString(), destImg)
 	if err != nil {
 		resp.Diagnostics.AddError("failed to get image ID", err.Error())
 		return
@@ -141,7 +136,7 @@ func (r *ImageSyncResource) Create(ctx context.Context, req resource.CreateReque
 }
 
 func (r *ImageSyncResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	var data ImageSyncResourceModel
+	var data models.ImageSyncResourceModel
 
 	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
 
@@ -149,26 +144,9 @@ func (r *ImageSyncResource) Read(ctx context.Context, req resource.ReadRequest, 
 		return
 	}
 
-	googleAuth, err := google.NewEnvAuthenticator()
-	if err != nil {
-		resp.Diagnostics.AddError("failed to create google authenticator", err.Error())
-		return
-	}
-
-	src := data.Source.ValueString()
 	dest := data.Destination.ValueString()
 
-	_, exists, srcDigest, err := getRemoteImage(src, authn.Anonymous)
-	switch {
-	case err != nil:
-		resp.Diagnostics.AddError("failed to get source image", err.Error())
-		return
-	case !exists:
-		resp.Diagnostics.AddError("source image does not exist", fmt.Sprintf("unable to locate source image at '%s'", src))
-		return
-	}
-
-	destImg, exists, destDigest, err := getRemoteImage(dest, googleAuth)
+	destImg, exists, _, err := image.GetRemoteImage(dest, r.auth)
 	switch {
 	case err != nil:
 		resp.Diagnostics.AddError("failed to get destination image", err.Error())
@@ -178,25 +156,36 @@ func (r *ImageSyncResource) Read(ctx context.Context, req resource.ReadRequest, 
 		return
 	}
 
-	imgID, err := imageID(data.Destination.ValueString(), destImg)
+	imgID, err := image.ImageID(data.Destination.ValueString(), destImg)
 	if err != nil {
 		resp.Diagnostics.AddError("failed to get image ID", err.Error())
 		return
 	}
 	data.Id = types.StringValue(imgID)
 
-	if srcDigest != destDigest {
-		data.SourceDigest = types.StringValue(destDigest)
-	}
-
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
 func (r *ImageSyncResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var config models.ImageSyncResourceModel
+	var state models.ImageSyncResourceModel
+
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// updates can only be triggered by 'source' changes that don't change the
+	// 'source_digest', suggesting a new registry/tag, but not a new underlying
+	// image. No actual update is necessary, only a state update is needed.
+	state.Source = config.Source
+	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
 func (r *ImageSyncResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	var data ImageSyncResourceModel
+	var data models.ImageSyncResourceModel
 
 	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
 
@@ -255,7 +244,7 @@ func (r *ImageSyncResource) Delete(ctx context.Context, req resource.DeleteReque
 			return
 		}
 
-		if imageID.String() == digestFromReference(data.Id.ValueString()) {
+		if imageID.String() == image.DigestFromReference(data.Id.ValueString()) {
 			// another image is using the same layers as we are, do not delete these
 			// layers!
 			return
@@ -285,65 +274,4 @@ func (r *ImageSyncResource) ImportState(ctx context.Context, req resource.Import
 
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("source"), imageParts[0])...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("destination"), imageParts[1])...)
-}
-
-// getRemoteImage returns a remote image if it exists along with a string
-// representation of it's digest
-func getRemoteImage(url string, auth authn.Authenticator) (v1.Image, bool, string, error) {
-	urlRef, err := name.ParseReference(url, name.WeakValidation)
-	if err != nil {
-		return empty.Image, false, "", err
-	}
-
-	i, err := remote.Image(urlRef, remote.WithAuth(auth))
-	if err != nil {
-		if tErr, ok := (err).(*transport.Error); ok && tErr.StatusCode == 404 {
-			return empty.Image, false, "", nil
-		}
-		return empty.Image, false, "", err
-	}
-
-	imgDigest, err := i.Digest()
-	if err != nil {
-		return empty.Image, true, "", err
-	}
-
-	return i, true, imgDigest.String(), nil
-}
-
-// imageID is the fully qualified URL to the image, with any tags replaced with
-// the sha256 digest instead
-func imageID(url string, img v1.Image) (string, error) {
-	if hasSHA, _ := regexp.MatchString("(.+)(@sha256:)([a-f0-9]{64})", url); hasSHA {
-		return url, nil
-	}
-
-	// Trim any tags from the url
-	trimTo := strings.LastIndex(url, ":")
-	if trimTo != -1 && trimTo < len(url) {
-		url = url[:trimTo]
-	}
-
-	digest, err := img.Digest()
-	if err != nil {
-		return "", err
-	}
-
-	return url + "@" + digest.String(), nil
-}
-
-// digestFromReference strips all content preceding the digest for the given,
-// fully qualified, reference. If no digest is present, the resulting string
-// will be empty
-func digestFromReference(ref string) string {
-	at := strings.LastIndex(ref, "@")
-	if at == -1 {
-		return ""
-	}
-
-	if at+1 >= len(ref) {
-		return ""
-	}
-
-	return ref[at+1:]
 }
