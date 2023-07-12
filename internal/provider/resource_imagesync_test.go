@@ -12,9 +12,10 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 )
 
-func TestImageSync(t *testing.T) {
+func TestImageSyncBasic(t *testing.T) {
 	srcReg := httptest.NewServer(registry.New())
 	defer srcReg.Close()
 
@@ -23,18 +24,85 @@ func TestImageSync(t *testing.T) {
 
 	fakeImg, _ := random.Image(10, 1)
 	fakeImgDigest, _ := fakeImg.Digest()
+
+	// let's pretend the tagged image source digest has changed
+	fakeImgModified, _ := random.Image(10, 1)
+	fakeImgDigestModified, _ := fakeImgModified.Digest()
+
 	initSrcImage(srcReg, "library/busybox:1.0", fakeImg)
 	initSrcImage(srcReg, "library/busybox:latest", fakeImg)
 
 	stubImageSyncConfig := func(srcReg, destReg *httptest.Server, srcTag, destTag string) string {
-		a := fmt.Sprintf(`
-	resource "ravelin_imagesync" "unit_test" {
-		source      = "%s/library/busybox:%s"
-		destination = "%s/busybox:%s"
-	}`, srcReg.URL[7:], srcTag, destReg.URL[7:], destTag)
-
-		return a
+		return fmt.Sprintf(`resource "ravelin_imagesync" "unit_test" {
+			source      = "%s/library/busybox:%s"
+			destination = "%s/busybox:%s"
+		}`, srcReg.URL[7:], srcTag, destReg.URL[7:], destTag)
 	}
+
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 nil,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		CheckDestroy:             nil,
+		Steps: []resource.TestStep{
+			{
+				// Create the resource, mirror the image to the dest registry, and correctly set the id (w/digest)
+				Config:       stubImageSyncConfig(srcReg, destReg, "1.0", "1.0"),
+				ResourceName: "ravelin_imagesync.unit_test",
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectResourceAction("ravelin_imagesync.unit_test", plancheck.ResourceActionCreate),
+					},
+				},
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("ravelin_imagesync.unit_test", "id", destReg.URL[7:]+"/busybox@"+fakeImgDigest.String()),
+					resource.TestCheckResourceAttr("ravelin_imagesync.unit_test", "source_digest", fakeImgDigest.String()),
+					resource.TestCheckResourceAttr("ravelin_imagesync.unit_test", "source", srcReg.URL[7:]+"/library/busybox:1.0"),
+				),
+			},
+
+			{
+				// Test that updating the source, but with the same digest, does not trigger an update
+				Config:       stubImageSyncConfig(srcReg, destReg, "latest", "1.0"),
+				ResourceName: "ravelin_imagesync.unit_test",
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectResourceAction("ravelin_imagesync.unit_test", plancheck.ResourceActionUpdate),
+					},
+				},
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("ravelin_imagesync.unit_test", "id", destReg.URL[7:]+"/busybox@"+fakeImgDigest.String()),
+					resource.TestCheckResourceAttr("ravelin_imagesync.unit_test", "source_digest", fakeImgDigest.String()),
+					resource.TestCheckResourceAttr("ravelin_imagesync.unit_test", "source", srcReg.URL[7:]+"/library/busybox:latest"),
+				),
+			},
+
+			{
+				// Test changing the digest of the source image but keep the same tag will trigger an update
+				PreConfig: func() {
+					initSrcImage(srcReg, "library/busybox:latest", fakeImgModified)
+				},
+				Config:       stubImageSyncConfig(srcReg, destReg, "latest", "1.0"),
+				ResourceName: "ravelin_imagesync.unit_test",
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectResourceAction("ravelin_imagesync.unit_test", plancheck.ResourceActionDestroyBeforeCreate),
+					},
+				},
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("ravelin_imagesync.unit_test", "id", destReg.URL[7:]+"/busybox@"+fakeImgDigestModified.String()),
+					resource.TestCheckResourceAttr("ravelin_imagesync.unit_test", "source_digest", fakeImgDigestModified.String()),
+					resource.TestCheckResourceAttr("ravelin_imagesync.unit_test", "source", srcReg.URL[7:]+"/library/busybox:latest"),
+				),
+			},
+		},
+	})
+}
+
+func TestImageSyncPublicImages(t *testing.T) {
+
+	destReg := httptest.NewServer(registry.New())
+	defer destReg.Close()
 
 	stubImageSyncDockerhubConfig := func(destReg *httptest.Server) string {
 		return fmt.Sprintf(`resource "ravelin_imagesync" "docker_unit_test" {
@@ -50,6 +118,7 @@ func TestImageSync(t *testing.T) {
 		}`, destReg.URL[7:])
 	}
 
+	// Test we can pull public dockerhub images
 	resource.Test(t, resource.TestCase{
 		IsUnitTest:               true,
 		PreCheck:                 nil,
@@ -57,29 +126,6 @@ func TestImageSync(t *testing.T) {
 		CheckDestroy:             nil,
 		Steps: []resource.TestStep{
 			{
-				// Create the resource, mirror the image to the dest registry, and correctly set the id (w/digest)
-				Config:       stubImageSyncConfig(srcReg, destReg, "1.0", "1.0"),
-				ResourceName: "ravelin_imagesync.unit_test",
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr("ravelin_imagesync.unit_test", "id", destReg.URL[7:]+"/busybox@"+fakeImgDigest.String()),
-					resource.TestCheckResourceAttr("ravelin_imagesync.unit_test", "source_digest", fakeImgDigest.String()),
-					resource.TestCheckResourceAttr("ravelin_imagesync.unit_test", "source", srcReg.URL[7:]+"/library/busybox:1.0"),
-				),
-			},
-
-			{
-				// Test that updating the source, but with the same digest, does not trigger an update
-				Config:       stubImageSyncConfig(srcReg, destReg, "latest", "1.0"),
-				ResourceName: "ravelin_imagesync.unit_test",
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr("ravelin_imagesync.unit_test", "id", destReg.URL[7:]+"/busybox@"+fakeImgDigest.String()),
-					resource.TestCheckResourceAttr("ravelin_imagesync.unit_test", "source_digest", fakeImgDigest.String()),
-					resource.TestCheckResourceAttr("ravelin_imagesync.unit_test", "source", srcReg.URL[7:]+"/library/busybox:latest"),
-				),
-			},
-
-			{
-				// Test we can pull public dockerhub images
 				Config:       stubImageSyncDockerhubConfig(destReg),
 				ResourceName: "ravelin_imagesync.docker_unit_test",
 				Check: resource.ComposeTestCheckFunc(
@@ -88,9 +134,17 @@ func TestImageSync(t *testing.T) {
 					resource.TestCheckResourceAttr("ravelin_imagesync.docker_unit_test", "source", "registry.hub.docker.com/library/hello-world:latest"),
 				),
 			},
+		},
+	})
 
+	// Test we can pull public quay.io images
+	resource.Test(t, resource.TestCase{
+		IsUnitTest:               true,
+		PreCheck:                 nil,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		CheckDestroy:             nil,
+		Steps: []resource.TestStep{
 			{
-				// Test we can pull public quay.io images
 				Config:       stubImageSyncQuayConfig(destReg),
 				ResourceName: "ravelin_imagesync.quay_unit_test",
 				Check: resource.ComposeTestCheckFunc(
