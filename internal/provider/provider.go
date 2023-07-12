@@ -41,7 +41,7 @@ func (p *ravelinProvider) Configure(_ context.Context, _ provider.ConfigureReque
 func (p *ravelinProvider) Resources(_ context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
 		func() resource.Resource {
-			return &ImageSyncResource{}
+			return NewImageSyncResource()
 		},
 	}
 }
