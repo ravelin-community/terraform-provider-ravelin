@@ -13,6 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/ravelin-community/terraform-provider-ravelin/internal/google"
+	"github.com/ravelin-community/terraform-provider-ravelin/internal/models"
 
 	"google.golang.org/api/cloudresourcemanager/v1"
 )
@@ -20,12 +21,6 @@ import (
 var _ datasource.DataSource = &ServiceAgentsDataSource{}
 
 type ServiceAgentsDataSource struct{}
-
-type ServiceAgentsDataSourceModel struct {
-	Project            types.String `tfsdk:"project"`
-	ServiceAgentPolicy types.String `tfsdk:"service_agent_policy"`
-	Id                 types.String `tfsdk:"id"`
-}
 
 func (r *ServiceAgentsDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_service_agents"
@@ -54,7 +49,7 @@ func (r *ServiceAgentsDataSource) Schema(ctx context.Context, req datasource.Sch
 }
 
 func (d *ServiceAgentsDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
-	var data ServiceAgentsDataSourceModel
+	var data models.ServiceAgentsDataSourceModel
 
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
 
