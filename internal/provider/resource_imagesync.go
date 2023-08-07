@@ -234,6 +234,10 @@ func (r *ImageSyncResource) Delete(ctx context.Context, req resource.DeleteReque
 
 		i, err := remote.Image(imgRef, authOpt)
 		if err != nil {
+			if strings.Contains(err.Error(), "MANIFEST_UNKNOWN") {
+				// this image layer can't be found, it must have been deleted already!
+				continue
+			}
 			resp.Diagnostics.AddError("failed to get image", err.Error())
 			return
 		}
