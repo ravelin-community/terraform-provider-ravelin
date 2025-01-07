@@ -24,8 +24,8 @@ import (
 var _ resource.Resource = &ImageSyncResource{}
 var _ resource.ResourceWithImportState = &ImageSyncResource{}
 
-func NewImageSyncResource() resource.Resource {
-	googleAuth, err := google.NewEnvAuthenticator()
+func NewImageSyncResource(ctx context.Context) resource.Resource {
+	googleAuth, err := google.NewEnvAuthenticator(ctx)
 	if err != nil {
 		panic(fmt.Errorf("failed to create google authenticator, %v", err.Error()))
 	}
@@ -200,7 +200,7 @@ func (r *ImageSyncResource) Delete(ctx context.Context, req resource.DeleteReque
 		return
 	}
 
-	googleAuth, err := google.NewEnvAuthenticator()
+	googleAuth, err := google.NewEnvAuthenticator(ctx)
 	if err != nil {
 		resp.Diagnostics.AddError("failed to create google authenticator", err.Error())
 		return
