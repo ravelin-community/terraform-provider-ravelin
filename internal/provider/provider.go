@@ -38,10 +38,10 @@ func (p *ravelinProvider) Schema(_ context.Context, _ provider.SchemaRequest, re
 func (p *ravelinProvider) Configure(_ context.Context, _ provider.ConfigureRequest, _ *provider.ConfigureResponse) {
 }
 
-func (p *ravelinProvider) Resources(ctx context.Context) []func() resource.Resource {
+func (p *ravelinProvider) Resources(_ context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
 		func() resource.Resource {
-			return NewImageSyncResource(ctx)
+			return &ImageSyncResource{}
 		},
 	}
 }

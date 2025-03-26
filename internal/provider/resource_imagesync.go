@@ -24,20 +24,7 @@ import (
 var _ resource.Resource = &ImageSyncResource{}
 var _ resource.ResourceWithImportState = &ImageSyncResource{}
 
-func NewImageSyncResource(ctx context.Context) resource.Resource {
-	googleAuth, err := google.NewEnvAuthenticator(ctx)
-	if err != nil {
-		panic(fmt.Errorf("failed to create google authenticator, %v", err.Error()))
-	}
-
-	return &ImageSyncResource{
-		auth: googleAuth,
-	}
-}
-
-type ImageSyncResource struct {
-	auth authn.Authenticator
-}
+type ImageSyncResource struct{}
 
 func (r *ImageSyncResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_imagesync"
@@ -86,6 +73,12 @@ func (r *ImageSyncResource) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
+	googleAuth, err := google.NewEnvAuthenticator(ctx)
+	if err != nil {
+		resp.Diagnostics.AddError("failed to create google authenticator", err.Error())
+		return
+	}
+
 	src := data.Source.ValueString()
 	dest := data.Destination.ValueString()
 
@@ -106,13 +99,13 @@ func (r *ImageSyncResource) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
-	if err := remote.Write(destRef, srcImg, remote.WithAuth(r.auth)); err != nil {
+	if err := remote.Write(destRef, srcImg, remote.WithAuth(googleAuth)); err != nil {
 		resp.Diagnostics.AddError("failed to write image", err.Error())
 		return
 	}
 
 	// get the image from registry to verify it was properly written
-	destImg, exists, destDigest, err := image.GetRemoteImage(dest, r.auth)
+	destImg, exists, destDigest, err := image.GetRemoteImage(dest, googleAuth)
 	switch {
 	case err != nil:
 		resp.Diagnostics.AddError("failed to get registry image", err.Error())
@@ -144,9 +137,15 @@ func (r *ImageSyncResource) Read(ctx context.Context, req resource.ReadRequest, 
 		return
 	}
 
+	googleAuth, err := google.NewEnvAuthenticator(ctx)
+	if err != nil {
+		resp.Diagnostics.AddError("failed to create google authenticator", err.Error())
+		return
+	}
+
 	dest := data.Destination.ValueString()
 
-	destImg, exists, _, err := image.GetRemoteImage(dest, r.auth)
+	destImg, exists, _, err := image.GetRemoteImage(dest, googleAuth)
 	switch {
 	case err != nil:
 		resp.Diagnostics.AddError("failed to get destination image", err.Error())
