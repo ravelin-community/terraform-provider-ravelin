@@ -1,0 +1,24 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+{{ .Description | trimspace }}
+
+This data source is particularly useful when you managed authoritative policies
+and conditional bindings are managed outside of Terraform. This could be the
+case with specific GCP services which have conditional bindings automatically created.
+
+-> **Note** On it's own this data is pretty useless, you need to combine these
+conditional bindings with your own policy bindings and apply these changes through a
+`google_project_iam_policy` resource. See example below for more details.
+
+## Example Usage
+
+{{ tffile (printf "examples/data-sources/%s/data-source.tf" .Name)}}
+
+{{ .SchemaMarkdown | trimspace }}
