@@ -20,7 +20,9 @@ import (
 
 var _ datasource.DataSource = &ServiceAgentsDataSource{}
 
-type ServiceAgentsDataSource struct{}
+type ServiceAgentsDataSource struct {
+	provider *ravelinProvider
+}
 
 func (r *ServiceAgentsDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_service_agents"
@@ -30,7 +32,7 @@ func (r *ServiceAgentsDataSource) Schema(ctx context.Context, req datasource.Sch
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"project": schema.StringAttribute{
-				MarkdownDescription: "Name of the GCP project to fetch service agents for",
+				MarkdownDescription: "Name of the GCP project to fetch service agents for. If not specified, the provider-level project will be used.",
 				Optional:            true,
 			},
 			"service_agent_policy": schema.StringAttribute{
@@ -48,12 +50,40 @@ func (r *ServiceAgentsDataSource) Schema(ctx context.Context, req datasource.Sch
 	}
 }
 
+func (d *ServiceAgentsDataSource) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+	if req.ProviderData == nil {
+		return
+	}
+
+	provider, ok := req.ProviderData.(*ravelinProvider)
+	if !ok {
+		resp.Diagnostics.AddError(
+			"Unexpected Data Source Configure Type",
+			fmt.Sprintf("Expected *ravelinProvider, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+		)
+		return
+	}
+
+	d.provider = provider
+}
+
 func (d *ServiceAgentsDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	var data models.ServiceAgentsDataSourceModel
 
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
 
 	project := data.Project.ValueString()
+	if project == "" && d.provider != nil {
+		project = d.provider.project
+	}
+
+	if project == "" {
+		resp.Diagnostics.AddError(
+			"Missing Project Configuration",
+			"The project attribute is required when not specified in the provider configuration.",
+		)
+		return
+	}
 
 	var c google.Config
 	err := c.NewCloudResourceManagerService(ctx)
@@ -143,6 +173,12 @@ func filterPolicy(policy *cloudresourcemanager.Policy, ProjectNumber string) (ma
 
 	for _, b := range policy.Bindings {
 		for _, member := range b.Members {
+
+			// ignore conditional bindings, we have another data source for that
+			if b.Condition != nil {
+				continue
+			}
+
 			// only look at service accounts
 			if !strings.HasPrefix(member, "serviceAccount:") {
 				continue
