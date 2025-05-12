@@ -79,7 +79,7 @@ resource "google_project_iam_policy" "project" {
 
 ### Optional
 
-- `project` (String) Name of the GCP project to fetch service agents for
+- `project` (String) Name of the GCP project to fetch service agents for. If not specified, the provider-level project will be used.
 
 ### Read-Only
 
