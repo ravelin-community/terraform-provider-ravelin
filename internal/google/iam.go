@@ -21,8 +21,13 @@ func (c *Config) NewCloudResourceManagerService(ctx context.Context) error {
 }
 
 func (c *Config) GetProjectIAMPolicy(projectID string) (*cloudresourcemanager.Policy, error) {
-	request := new(cloudresourcemanager.GetIamPolicyRequest)
-	policy, err := c.CloudResourceManagerService.Projects.GetIamPolicy(projectID, request).Do()
+	request := cloudresourcemanager.GetIamPolicyRequest{
+		Options: &cloudresourcemanager.GetPolicyOptions{
+			RequestedPolicyVersion: 3,
+		},
+	}
+	policy, err := c.CloudResourceManagerService.Projects.GetIamPolicy(projectID, &request).Do()
+
 	if err != nil {
 		return nil, err
 	}
