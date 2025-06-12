@@ -71,6 +71,9 @@ func (p *ravelinProvider) DataSources(_ context.Context) []func() datasource.Dat
 		func() datasource.DataSource {
 			return &ConditionalBindingsDataSource{}
 		},
+		func() datasource.DataSource {
+			return &GsudoEscalationsDataSource{}
+		},
 	}
 }
 
