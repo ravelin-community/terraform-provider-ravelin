@@ -1,4 +1,4 @@
-package iam
+package RavelinAccess
 
 import (
 	"fmt"
@@ -8,36 +8,26 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ravelin-community/terraform-provider-ravelin/internal/gsudo"
 	"gopkg.in/yaml.v3"
 )
 
-type IAM struct {
+type RavelinAccess struct {
 	Email       string
-	GCPIAM      GCPAccess    `yaml:"gcp,omitempty"`   // GCP IAM roles and groups
-	GsudoConfig gsudo.Config `yaml:"gsudo,omitempty"` // gsudo configuration for the user
+	GCPAccess   GCPAccess   `yaml:"gcp,omitempty"`   // GCP IAM roles and groups
+	GsudoAccess GsudoAccess `yaml:"gsudo,omitempty"` // gsudo configuration for the user
+}
+
+type GsudoAccess struct {
+	Escalations map[string][]string `yaml:"escalations"` // list of escalation roles per project
+	Inherit     bool                `yaml:"inherit"`     // whether the roles are inherited from a group
 }
 
 type GCPAccess struct {
 	Groups []string `yaml:"groups,omitempty"` // list of google workspace groups the user belongs to
 }
 
-func exctractAccess(filePath string) (error, IAM) {
-	var iam IAM
-	yamlFile, err := os.ReadFile(filePath)
-	if err != nil {
-		return fmt.Errorf("error reading IAM file: %v", err), iam
-	}
-
-	if err = yaml.Unmarshal(yamlFile, &iam); err != nil {
-		return fmt.Errorf("error unmarshaling IAM file: %v", err), iam
-	}
-
-	return nil, iam
-}
-
-func ExtractUserAccess(iamDirectory string) (error, []IAM) {
-	userAccess := make([]IAM, 0)
+func ExtractUserAccess(iamDirectory string) (error, []RavelinAccess) {
+	users := make([]RavelinAccess, 0)
 	err, userFiles := getUserFiles(iamDirectory)
 	if err != nil {
 		return fmt.Errorf("error getting user files:  %v", err), nil
@@ -49,24 +39,43 @@ func ExtractUserAccess(iamDirectory string) (error, []IAM) {
 			continue
 		}
 
-		err, userIAM := exctractAccess(fmt.Sprintf("%s/users/%s", iamDirectory, userFile))
-		userIAM.Email = userFileToEmail(userFile)
+		err, yaml := readYamlFile(fmt.Sprintf("%s/users/%s", iamDirectory, userFile))
+		if err != nil {
+			log.Fatalf("error reading user file %s: %v", userFile, err)
+		}
+		if len(yaml) == 0 {
+			log.Printf("Skipping empty user file: %s", userFile)
+			continue
+		}
+
+		err, user := exctractAccess(yaml)
 		if err != nil {
 			log.Fatalf("error extracting user access: %v", err)
 		}
 
-		for _, group := range userIAM.GCPIAM.Groups {
+		user.Email = userFileToEmail(userFile)
 
-			err, groupIAM := exctractAccess(fmt.Sprintf("%s/groups/%s.yaml", iamDirectory, group))
+		for _, g := range user.GCPAccess.Groups {
+			err, yaml := readYamlFile(fmt.Sprintf("%s/groups/%s.yaml", iamDirectory, g))
 			if err != nil {
-				log.Fatalf("error extracting group access for %s: %v", group, err)
+				log.Fatalf("error reading group file %s: %v", g, err)
 			}
-			maps.Copy(userIAM.GsudoConfig.Escalations, groupIAM.GsudoConfig.Escalations)
+			if len(yaml) == 0 {
+				log.Printf("Skipping empty group file: %s", g)
+				continue
+			}
+
+			err, group := exctractAccess(yaml)
+			if err != nil {
+				log.Fatalf("error extracting group access for %s: %v", g, err)
+			}
+
+			maps.Copy(user.GsudoAccess.Escalations, group.GsudoAccess.Escalations)
 		}
 
-		userAccess = append(userAccess, userIAM)
+		users = append(users, user)
 	}
-	return nil, userAccess
+	return nil, users
 }
 
 func getUserFiles(iamDirectory string) (error, []string) {
@@ -83,6 +92,27 @@ func getUserFiles(iamDirectory string) (error, []string) {
 	}
 
 	return nil, userFiles
+}
+
+func readYamlFile(filePath string) (error, []byte) {
+	yamlFile, err := os.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("error reading YAML file %s: %v", filePath, err), nil
+	}
+	if len(yamlFile) == 0 {
+		return fmt.Errorf("YAML file %s is empty", filePath), nil
+	}
+	return nil, yamlFile
+}
+
+func exctractAccess(yamlBytes []byte) (error, RavelinAccess) {
+	var access RavelinAccess
+
+	if err := yaml.Unmarshal(yamlBytes, &access); err != nil {
+		return fmt.Errorf("error unmarshaling IAM file: %v", err), access
+	}
+
+	return nil, access
 }
 
 func userFileToEmail(file string) string {

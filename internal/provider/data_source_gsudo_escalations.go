@@ -89,9 +89,9 @@ func (d *GsudoEscalationsDataSource) Read(ctx context.Context, req datasource.Re
 	allUsersEscalations := make(map[string]basetypes.MapValue, len(allUserAccess))
 
 	for _, userAccess := range allUserAccess {
-		userEscalationsMap := make(map[string]basetypes.ListValue, len(userAccess.GsudoConfig.Escalations))
+		userEscalationsMap := make(map[string]basetypes.ListValue, len(userAccess.GsudoAccess.Escalations))
 
-		for p, r := range userAccess.GsudoConfig.Escalations {
+		for p, r := range userAccess.GsudoAccess.Escalations {
 			escalationRoles := make([]types.String, len(r))
 			for i, role := range r {
 				escalationRoles[i] = types.StringValue(role)
