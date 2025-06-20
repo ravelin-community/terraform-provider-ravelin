@@ -8,7 +8,7 @@ import (
 type TwingateAccessDataSourceModel struct {
 	Id             types.String `tfsdk:"id"`
 	TwingateAccess types.Map    `tfsdk:"twingate_access"` // Map of users to Twingate access
-	Iam_path       types.String `tfsdk:"iam_path"`        // Path to the root of the IAM directory containing user and group definitions
+	IamPath        types.String `tfsdk:"iam_path"`        // Path to the root of the IAM directory containing user and group definitions
 	UserEmail      types.String `tfsdk:"user_email"`      // Email of the user to retrieve Twingate access for
 }
 

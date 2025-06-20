@@ -71,7 +71,7 @@ func (d *GsudoEscalationsDataSource) Read(ctx context.Context, req datasource.Re
 	var data models.GsudoEscalationsDataSourceModel
 
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
-	iamPath := data.Iam_path.ValueString()
+	iamPath := data.IamPath.ValueString()
 	if iamPath == "" {
 		resp.Diagnostics.AddError(
 			"Missing IAM Path",
@@ -116,7 +116,7 @@ func (d *GsudoEscalationsDataSource) Read(ctx context.Context, req datasource.Re
 
 	resp.State.SetAttribute(ctx, path.Root("id"), types.StringValue(strconv.FormatInt(time.Now().Unix(), 10)))
 
-	if userEmail := data.User_email.ValueString(); userEmail != "" {
+	if userEmail := data.UserEmail.ValueString(); userEmail != "" {
 		userEscalations := make(map[string]basetypes.MapValue, 1)
 
 		if _, found := allUsersEscalations[userEmail]; found {

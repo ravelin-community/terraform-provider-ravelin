@@ -69,7 +69,7 @@ func (d *TwingateAccessDataSource) Read(ctx context.Context, req datasource.Read
 	var data models.TwingateAccessDataSourceModel
 
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
-	iamPath := data.Iam_path.ValueString()
+	iamPath := data.IamPath.ValueString()
 	if iamPath == "" {
 		resp.Diagnostics.AddError(
 			"Missing IAM Path",
