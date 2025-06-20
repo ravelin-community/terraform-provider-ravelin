@@ -12,9 +12,10 @@ import (
 )
 
 type RavelinAccess struct {
-	Email       string
-	GCPAccess   GCPAccess   `yaml:"gcp,omitempty"`   // GCP IAM roles and groups
-	GsudoAccess GsudoAccess `yaml:"gsudo,omitempty"` // gsudo configuration for the user
+	Email          string
+	GCPAccess      GCPAccess      `yaml:"gcp,omitempty"`      // GCP IAM roles and groups
+	GsudoAccess    GsudoAccess    `yaml:"gsudo,omitempty"`    // gsudo configuration for the user
+	TwingateAccess TwingateAccess `yaml:"twingate,omitempty"` // Twingate access configuration for the user
 }
 
 type GsudoAccess struct {
@@ -24,6 +25,11 @@ type GsudoAccess struct {
 
 type GCPAccess struct {
 	Groups []string `yaml:"groups,omitempty"` // list of google workspace groups the user belongs to
+}
+
+type TwingateAccess struct {
+	Enabled bool `yaml:"enabled"` // whether the user has Twingate access
+	Admin   bool `yaml:"admin"`   // whether the user has Twingate admin access
 }
 
 func ExtractUserAccess(iamDirectory string) (error, []RavelinAccess) {

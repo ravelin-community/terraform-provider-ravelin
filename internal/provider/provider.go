@@ -74,6 +74,9 @@ func (p *ravelinProvider) DataSources(_ context.Context) []func() datasource.Dat
 		func() datasource.DataSource {
 			return &GsudoEscalationsDataSource{}
 		},
+		func() datasource.DataSource {
+			return &TwingateAccessDataSource{}
+		},
 	}
 }
 
