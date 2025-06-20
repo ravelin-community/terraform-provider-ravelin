@@ -1,13 +1,14 @@
 package ravelinaccess
 
 import (
+	"context"
 	"fmt"
-	"log"
 	"maps"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"gopkg.in/yaml.v3"
 )
 
@@ -32,48 +33,48 @@ type TwingateAccess struct {
 	Admin   bool `yaml:"admin"`   // whether the user has Twingate admin access
 }
 
-func ExtractUserAccess(iamDirectory string) (error, []RavelinAccess) {
+func ExtractUserAccess(ctx context.Context, iamDirectory string) ([]RavelinAccess, error) {
 	users := make([]RavelinAccess, 0, 200) // Preallocate slice for 200 users
 	err, userFiles := getUserFiles(iamDirectory)
 	if err != nil {
-		return fmt.Errorf("error getting user files:  %v", err), nil
+		return nil, fmt.Errorf("error getting user files:  %v", err)
 	}
 
 	for _, userFile := range userFiles {
 		if !strings.HasSuffix(userFile, ".yaml") {
-			log.Printf("Skipping non-YAML file: %s", userFile)
+			tflog.Info(ctx, fmt.Sprintf("Skipping non-YAML file: %s", userFile))
 			continue
 		}
 
-		err, yaml := readYamlFile(fmt.Sprintf("%s/users/%s", iamDirectory, userFile))
+		yaml, err := readYamlFile(fmt.Sprintf("%s/users/%s", iamDirectory, userFile))
 		if err != nil {
-			log.Fatalf("error reading user file %s: %v", userFile, err)
+			tflog.Error(ctx, fmt.Sprintf("error reading user file %s: %v", userFile, err))
 		}
 		if len(yaml) == 0 {
-			log.Printf("Skipping empty user file: %s", userFile)
+			tflog.Info(ctx, fmt.Sprintf("Skipping empty user file: %s", userFile))
 			continue
 		}
 
-		err, user := exctractAccess(yaml)
+		user, err := exctractAccess(yaml)
 		if err != nil {
-			log.Fatalf("error extracting user access: %v", err)
+			tflog.Error(ctx, fmt.Sprintf("error extracting user access: %v", err))
 		}
 
 		user.Email = userFileToEmail(userFile)
 
 		for _, g := range user.GCP.Groups {
-			err, yaml := readYamlFile(fmt.Sprintf("%s/groups/%s.yaml", iamDirectory, g))
+			yaml, err := readYamlFile(fmt.Sprintf("%s/groups/%s.yaml", iamDirectory, g))
 			if err != nil {
-				log.Fatalf("error reading group file %s: %v", g, err)
+				tflog.Error(ctx, fmt.Sprintf("error reading group file %s: %v", g, err))
 			}
 			if len(yaml) == 0 {
-				log.Printf("Skipping empty group file: %s", g)
+				tflog.Info(ctx, fmt.Sprintf("Skipping empty group file: %s", g))
 				continue
 			}
 
-			err, group := exctractAccess(yaml)
+			group, err := exctractAccess(yaml)
 			if err != nil {
-				log.Fatalf("error extracting group access for %s: %v", g, err)
+				tflog.Error(ctx, fmt.Sprintf("error extracting group access for %s: %v", g, err))
 			}
 
 			maps.Copy(user.Gsudo.Escalations, group.Gsudo.Escalations)
@@ -81,7 +82,7 @@ func ExtractUserAccess(iamDirectory string) (error, []RavelinAccess) {
 
 		users = append(users, user)
 	}
-	return nil, users
+	return users, nil
 }
 
 func getUserFiles(iamDirectory string) (error, []string) {
@@ -100,25 +101,25 @@ func getUserFiles(iamDirectory string) (error, []string) {
 	return nil, userFiles
 }
 
-func readYamlFile(filePath string) (error, []byte) {
+func readYamlFile(filePath string) ([]byte, error) {
 	yamlFile, err := os.ReadFile(filePath)
 	if err != nil {
-		return fmt.Errorf("error reading YAML file %s: %v", filePath, err), nil
+		return nil, fmt.Errorf("error reading YAML file %s: %v", filePath, err)
 	}
 	if len(yamlFile) == 0 {
-		return fmt.Errorf("YAML file %s is empty", filePath), nil
+		return nil, fmt.Errorf("YAML file %s is empty", filePath)
 	}
-	return nil, yamlFile
+	return yamlFile, nil
 }
 
-func exctractAccess(data []byte) (error, RavelinAccess) {
+func exctractAccess(data []byte) (RavelinAccess, error) {
 	var access RavelinAccess
 
 	if err := yaml.Unmarshal(data, &access); err != nil {
-		return fmt.Errorf("error unmarshaling IAM file: %v", err), access
+		return access, fmt.Errorf("error unmarshaling IAM file: %v", err)
 	}
 
-	return nil, access
+	return access, nil
 }
 
 func userFileToEmail(file string) string {

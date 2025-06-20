@@ -2,6 +2,8 @@ package provider
 
 import (
 	"context"
+	"strconv"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -60,7 +62,7 @@ func (d *TwingateAccessDataSource) Read(ctx context.Context, req datasource.Read
 		return
 	}
 
-	err, allUserAccess := iam.ExtractUserAccess(iamPath)
+	allUserAccess, err := iam.ExtractUserAccess(ctx, iamPath)
 	if err != nil {
 		resp.Diagnostics.AddError("failed to extract user access", err.Error())
 		return
@@ -89,6 +91,7 @@ func (d *TwingateAccessDataSource) Read(ctx context.Context, req datasource.Read
 		return
 	}
 	data.TwingateAccess = dataTwingateAccess
+	data.Id = types.StringValue(strconv.FormatInt(time.Now().Unix(), 10))
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 

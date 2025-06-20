@@ -137,7 +137,7 @@ gsudo:
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err, out := exctractAccess([]byte(tt.input))
+			out, err := exctractAccess([]byte(tt.input))
 			if tt.expError == "" {
 				require.NoError(t, err)
 			}
