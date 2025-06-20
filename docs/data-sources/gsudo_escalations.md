@@ -1,9 +1,5 @@
----
-page_title: "ravelin_gsudo_escalations Data Source - terraform-provider-ravelin"
-subcategory: ""
-description: |-
-  
----
+--- page_title: "ravelin_gsudo_escalations Data Source - terraform-provider-ravelin" subcategory: ""
+description: |-    ---
 
 # ravelin_gsudo_escalations (Data Source)
 
@@ -11,7 +7,8 @@ description: |-
 
 
 This data source is useful for internal usage at Ravelin Technologies. It opens
-a list of IAM yaml files which describe user access to our platform & tools. 
+a list of IAM yaml files which describe user access to our platform & tools to
+retrieve escalation access for gsudo users.
 
 -> **Note** This data source is for internal use only.
 

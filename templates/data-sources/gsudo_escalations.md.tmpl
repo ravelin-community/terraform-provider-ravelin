@@ -1,9 +1,6 @@
----
-page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
-subcategory: ""
-description: |-
-{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
----
+--- page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}" subcategory: ""
+description: |- {{ .Description | plainmarkdown | trimspace | prefixlines "  "
+}} ---
 
 # {{.Name}} ({{.Type}})
 
@@ -11,7 +8,8 @@ description: |-
 
 
 This data source is useful for internal usage at Ravelin Technologies. It opens
-a list of IAM yaml files which describe user access to our platform & tools. 
+a list of IAM yaml files which describe user access to our platform & tools to
+retrieve escalation access for gsudo users.
 
 -> **Note** This data source is for internal use only.
 
