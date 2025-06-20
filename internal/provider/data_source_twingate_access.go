@@ -54,8 +54,8 @@ func (d *TwingateAccessDataSource) Read(ctx context.Context, req datasource.Read
 	iamPath := data.IamPath.ValueString()
 	if iamPath == "" {
 		resp.Diagnostics.AddError(
-			"Missing IAM Path",
-			"The `iam_path` attribute is required but was not set. Please provide the path to the IAM directory containing user and group definitions.",
+			"missing IAM path",
+			"the `iam_path` attribute is required but was not set, please provide the path to the IAM directory containing user and group definitions.",
 		)
 		return
 	}

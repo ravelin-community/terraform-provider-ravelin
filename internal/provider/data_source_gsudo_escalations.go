@@ -57,8 +57,8 @@ func (d *GsudoEscalationsDataSource) Read(ctx context.Context, req datasource.Re
 	iamPath := data.IamPath.ValueString()
 	if iamPath == "" {
 		resp.Diagnostics.AddError(
-			"Missing IAM Path",
-			"The `iam_path` attribute is required but was not set. Please provide the path to the IAM directory containing user and group definitions.",
+			"missing IAM path",
+			"the `iam_path` attribute is required but was not set, please provide the path to the IAM directory containing user and group definitions.",
 		)
 		return
 	}
@@ -91,8 +91,8 @@ func (d *GsudoEscalationsDataSource) Read(ctx context.Context, req datasource.Re
 
 	if resp.Diagnostics.HasError() {
 		resp.Diagnostics.AddError(
-			"Error Processing Escalations",
-			"An error occurred while processing the user escalations. Please check the IAM path and ensure it contains valid user and group definitions.",
+			"error processing escalations",
+			"an error occurred while processing the user escalations, please check the IAM path and ensure it contains valid user and group definitions.",
 		)
 		return
 	}
@@ -106,8 +106,8 @@ func (d *GsudoEscalationsDataSource) Read(ctx context.Context, req datasource.Re
 			userEscalations[userEmail] = allUsersEscalations[userEmail]
 		} else {
 			resp.Diagnostics.AddWarning(
-				"User Email Not Found",
-				fmt.Sprintf("The specified user email '%s' does not have any escalations defined. Returning empty escalations.", userEmail),
+				"user email not found",
+				fmt.Sprintf("the specified user email '%s' does not have any escalations defined, returning empty escalations.", userEmail),
 			)
 		}
 
