@@ -33,7 +33,7 @@ type TwingateAccess struct {
 }
 
 func ExtractUserAccess(iamDirectory string) (error, []RavelinAccess) {
-	users := make([]RavelinAccess, 0)
+	users := make([]RavelinAccess, 0, 200) // Preallocate slice for 200 users
 	err, userFiles := getUserFiles(iamDirectory)
 	if err != nil {
 		return fmt.Errorf("error getting user files:  %v", err), nil
@@ -111,10 +111,10 @@ func readYamlFile(filePath string) (error, []byte) {
 	return nil, yamlFile
 }
 
-func exctractAccess(yamlBytes []byte) (error, RavelinAccess) {
+func exctractAccess(data []byte) (error, RavelinAccess) {
 	var access RavelinAccess
 
-	if err := yaml.Unmarshal(yamlBytes, &access); err != nil {
+	if err := yaml.Unmarshal(data, &access); err != nil {
 		return fmt.Errorf("error unmarshaling IAM file: %v", err), access
 	}
 
