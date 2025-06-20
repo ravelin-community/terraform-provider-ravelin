@@ -12,10 +12,10 @@ import (
 )
 
 type RavelinAccess struct {
-	Email          string
-	GCPAccess      GCPAccess      `yaml:"gcp,omitempty"`      // GCP IAM roles and groups
-	GsudoAccess    GsudoAccess    `yaml:"gsudo,omitempty"`    // gsudo configuration for the user
-	TwingateAccess TwingateAccess `yaml:"twingate,omitempty"` // Twingate access configuration for the user
+	Email    string
+	GCP      GCPAccess      `yaml:"gcp,omitempty"`      // GCP IAM roles and groups
+	Gsudo    GsudoAccess    `yaml:"gsudo,omitempty"`    // gsudo configuration for the user
+	Twingate TwingateAccess `yaml:"twingate,omitempty"` // Twingate access configuration for the user
 }
 
 type GsudoAccess struct {
@@ -61,7 +61,7 @@ func ExtractUserAccess(iamDirectory string) (error, []RavelinAccess) {
 
 		user.Email = userFileToEmail(userFile)
 
-		for _, g := range user.GCPAccess.Groups {
+		for _, g := range user.GCP.Groups {
 			err, yaml := readYamlFile(fmt.Sprintf("%s/groups/%s.yaml", iamDirectory, g))
 			if err != nil {
 				log.Fatalf("error reading group file %s: %v", g, err)
@@ -76,7 +76,7 @@ func ExtractUserAccess(iamDirectory string) (error, []RavelinAccess) {
 				log.Fatalf("error extracting group access for %s: %v", g, err)
 			}
 
-			maps.Copy(user.GsudoAccess.Escalations, group.GsudoAccess.Escalations)
+			maps.Copy(user.Gsudo.Escalations, group.Gsudo.Escalations)
 		}
 
 		users = append(users, user)

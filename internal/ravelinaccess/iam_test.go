@@ -56,10 +56,10 @@ gsudo:
       - roles/owner
 `,
 			expected: RavelinAccess{
-				GCPAccess: GCPAccess{
+				GCP: GCPAccess{
 					Groups: []string{"group"},
 				},
-				GsudoAccess: GsudoAccess{
+				Gsudo: GsudoAccess{
 					Inherit:     true,
 					Escalations: map[string][]string{"test-user-project": {"roles/owner"}},
 				},
@@ -77,10 +77,10 @@ gsudo:
       - roles/owner
 `,
 			expected: RavelinAccess{
-				GCPAccess: GCPAccess{
+				GCP: GCPAccess{
 					Groups: []string{"group"},
 				},
-				GsudoAccess: GsudoAccess{
+				Gsudo: GsudoAccess{
 					Inherit:     false,
 					Escalations: map[string][]string{"test-user-project": {"roles/owner"}},
 				},
@@ -101,10 +101,10 @@ gsudo:
       - roles/editor
 `,
 			expected: RavelinAccess{
-				GCPAccess: GCPAccess{
+				GCP: GCPAccess{
 					Groups: []string{"group"},
 				},
-				GsudoAccess: GsudoAccess{
+				Gsudo: GsudoAccess{
 					Inherit: false,
 					Escalations: map[string][]string{"test-user-project": {"roles/owner", "roles/editor"},
 						"test-project": {"roles/editor"}},
@@ -125,10 +125,10 @@ gsudo:
       - roles/editor
 `,
 			expected: RavelinAccess{
-				GCPAccess: GCPAccess{
+				GCP: GCPAccess{
 					Groups: []string{"group", "another-group"},
 				},
-				GsudoAccess: GsudoAccess{
+				Gsudo: GsudoAccess{
 					Inherit:     false,
 					Escalations: map[string][]string{"test-user-project": {"roles/owner", "roles/editor"}},
 				},
