@@ -11,8 +11,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
-	iam "github.com/ravelin-community/terraform-provider-ravelin/internal/iam"
 	"github.com/ravelin-community/terraform-provider-ravelin/internal/models"
+	iam "github.com/ravelin-community/terraform-provider-ravelin/internal/ravelinaccess"
 )
 
 type GsudoEscalationsDataSource struct {

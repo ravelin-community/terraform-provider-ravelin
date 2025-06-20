@@ -1,4 +1,4 @@
-package RavelinAccess
+package ravelinaccess
 
 import (
 	"testing"

@@ -8,8 +8,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	iam "github.com/ravelin-community/terraform-provider-ravelin/internal/iam"
 	"github.com/ravelin-community/terraform-provider-ravelin/internal/models"
+	iam "github.com/ravelin-community/terraform-provider-ravelin/internal/ravelinaccess"
 )
 
 type TwingateAccessDataSource struct {
