@@ -11,6 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/ravelin-community/terraform-provider-ravelin/internal/models"
 	iam "github.com/ravelin-community/terraform-provider-ravelin/internal/ravelinaccess"
 )
@@ -72,6 +73,12 @@ func (d *GsudoEscalationsDataSource) Read(ctx context.Context, req datasource.Re
 	allUsersEscalations := make(map[string]basetypes.MapValue, len(allUserAccess))
 
 	for _, userAccess := range allUserAccess {
+
+		if len(userAccess.Gsudo.Escalations) == 0 {
+			tflog.Info(ctx, fmt.Sprintf("Skipping user %s with no escalations defined", userAccess.Email))
+			continue
+		}
+
 		userEscalationsMap := make(map[string]basetypes.ListValue, len(userAccess.Gsudo.Escalations))
 
 		for p, r := range userAccess.Gsudo.Escalations {

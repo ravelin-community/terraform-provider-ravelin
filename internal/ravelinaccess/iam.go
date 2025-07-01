@@ -3,10 +3,11 @@ package ravelinaccess
 import (
 	"context"
 	"fmt"
-	"maps"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"slices"
 
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"gopkg.in/yaml.v3"
@@ -41,7 +42,7 @@ func ExtractUserAccess(ctx context.Context, iamDirectory string) ([]RavelinAcces
 	}
 
 	for _, userFile := range userFiles {
-		if !strings.HasSuffix(userFile, ".yaml") {
+		if !strings.HasSuffix(userFile, ".yml") {
 			tflog.Info(ctx, fmt.Sprintf("Skipping non-YAML file: %s", userFile))
 			continue
 		}
@@ -62,8 +63,8 @@ func ExtractUserAccess(ctx context.Context, iamDirectory string) ([]RavelinAcces
 
 		user.Email = userFileToEmail(userFile)
 
-		for _, g := range user.GCP.Groups {
-			yaml, err := readYamlFile(fmt.Sprintf("%s/groups/%s.yaml", iamDirectory, g))
+		for i, g := range user.GCP.Groups {
+			yaml, err := readYamlFile(fmt.Sprintf("%s/groups/%s.yml", iamDirectory, g))
 			if err != nil {
 				tflog.Error(ctx, fmt.Sprintf("error reading group file %s: %v", g, err))
 			}
@@ -76,8 +77,10 @@ func ExtractUserAccess(ctx context.Context, iamDirectory string) ([]RavelinAcces
 			if err != nil {
 				tflog.Error(ctx, fmt.Sprintf("error extracting group access for %s: %v", g, err))
 			}
-
-			maps.Copy(user.Gsudo.Escalations, group.Gsudo.Escalations)
+			if user.GCP.Groups != nil && user.Gsudo.Inherit && i == 0 {
+				// Users inherit escalations from the first group only
+				user.Gsudo.Escalations = MergeMapsOfSlices(user.Gsudo.Escalations, group.Gsudo.Escalations)
+			}
 		}
 
 		users = append(users, user)
@@ -119,9 +122,60 @@ func exctractAccess(data []byte) (RavelinAccess, error) {
 		return access, fmt.Errorf("error unmarshaling IAM file: %v", err)
 	}
 
+	if access.Gsudo.Escalations == nil {
+		access.Gsudo.Escalations = make(map[string][]string)
+	}
+
+	if access.GCP.Groups == nil {
+		access.GCP.Groups = make([]string, 0)
+	}
+
+	// Ensure custom roles are transformed to full GCP role names
+	access.Gsudo.Escalations = transformCustomRoles(access.Gsudo.Escalations)
+
 	return access, nil
 }
 
 func userFileToEmail(file string) string {
 	return strings.ReplaceAll(strings.Split(filepath.Base(file), ".")[0], "_", ".") + "@ravelin.com"
+}
+
+// Alternative to maps.Copy when overwriting existing keys is not desired.
+func MergeMapsOfSlices[K comparable](dst, src map[K][]string) map[K][]string {
+	merged := make(map[K][]string, len(dst)+len(src))
+	for k, v := range dst {
+		merged[k] = dedupSlices(slices.Clone(v))
+	}
+	for k, vSrc := range src {
+		if vDst, exists := merged[k]; exists {
+			merged[k] = dedupSlices(slices.Concat(vDst, vSrc))
+		} else {
+			merged[k] = dedupSlices(slices.Clone(vSrc))
+		}
+	}
+	return merged
+}
+
+func dedupSlices(s []string) []string {
+	seen := make(map[string]struct{})
+	var result []string
+	result = make([]string, 0, len(s))
+	for _, v := range s {
+		if _, ok := seen[v]; !ok {
+			seen[v] = struct{}{}
+			result = append(result, v)
+		}
+	}
+	return result
+}
+
+func transformCustomRoles(m map[string][]string) map[string][]string {
+	for p, roles := range m {
+		for i, role := range roles {
+			if strings.HasPrefix(role, "custom/") {
+				roles[i] = fmt.Sprintf("projects/%s/roles%s", p, strings.Trim(role, "custom"))
+			}
+		}
+	}
+	return m
 }
