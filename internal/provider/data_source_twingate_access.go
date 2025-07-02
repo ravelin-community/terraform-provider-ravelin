@@ -70,15 +70,23 @@ func (d *TwingateAccessDataSource) Read(ctx context.Context, req datasource.Read
 
 	twingateAccess := make(map[string]models.TwingateAccessModel)
 	for _, userAccess := range allUserAccess {
-		if userAccess.Twingate.Enabled {
+		if *userAccess.Twingate.Enabled {
 
 			if !data.UserEmail.IsNull() && data.UserEmail.ValueString() != userAccess.Email {
 				continue // Skip if user email does not match
 			}
 
+			if userAccess.Twingate.Enabled == nil {
+				userAccess.Twingate.Enabled = new(bool)
+			}
+
+			if userAccess.Twingate.Admin == nil {
+				userAccess.Twingate.Admin = new(bool)
+			}
+
 			twingateAccess[userAccess.Email] = models.TwingateAccessModel{
-				Enabled: userAccess.Twingate.Enabled,
-				Admin:   userAccess.Twingate.Admin,
+				Enabled: *userAccess.Twingate.Enabled,
+				Admin:   *userAccess.Twingate.Admin,
 			}
 		}
 	}
