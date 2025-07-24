@@ -63,7 +63,7 @@ func ExtractUserAccess(ctx context.Context, iamDirectory string) ([]RavelinAcces
 
 		user.Email = userFileToEmail(userFile)
 
-		for i, g := range user.GCP.Groups {
+		for _, g := range user.GCP.Groups {
 			yaml, err := readYamlFile(fmt.Sprintf("%s/groups/%s.yml", iamDirectory, g))
 			if err != nil {
 				tflog.Error(ctx, fmt.Sprintf("error reading group file %s: %v", g, err))
@@ -78,7 +78,7 @@ func ExtractUserAccess(ctx context.Context, iamDirectory string) ([]RavelinAcces
 				tflog.Error(ctx, fmt.Sprintf("error extracting group access for %s: %v", g, err))
 			}
 
-			if user.Gsudo.Inherit && i == 0 {
+			if user.Gsudo.Inherit {
 				// Users inherit escalations from the first group only
 				user.Gsudo.Escalations = MergeMapsOfSlices(user.Gsudo.Escalations, group.Gsudo.Escalations)
 			}
