@@ -295,32 +295,33 @@ gsudo:
 	}
 }
 
-func TestCustomRoleTransformation(t *testing.T) {
+func TestExpandCustomRoles(t *testing.T) {
 	tests := []struct {
 		name      string
 		input     map[string][]string
 		expOutput map[string][]string
 	}{
 		{
-			name:      "No custom roles",
+			name:      "no_custom_roles",
 			input:     map[string][]string{"test-project": {"roles/owner", "role/editor"}},
 			expOutput: map[string][]string{"test-project": {"roles/owner", "role/editor"}},
 		},
 		{
-			name:      "normal custom role usage",
-			input:     map[string][]string{"test-project": {"roles/owner", "custom/admin"}},
-			expOutput: map[string][]string{"test-project": {"roles/owner", "projects/test-project/roles/admin"}},
-		},
-		{
-			name:      "multiple custom role usage",
-			input:     map[string][]string{"test-project": {"custom/owner", "custom/admin"}},
-			expOutput: map[string][]string{"test-project": {"projects/test-project/roles/owner", "projects/test-project/roles/admin"}},
+			name: "expand_custom_role",
+			input: map[string][]string{
+				"test-project":  {"roles/owner", "custom/admin"},
+				"test-project2": {"roles/bigquery.admin", "custom/editor"},
+			},
+			expOutput: map[string][]string{
+				"test-project":  {"roles/owner", "projects/test-project/roles/admin"},
+				"test-project2": {"roles/bigquery.admin", "projects/test-project2/roles/editor"},
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			out := transformCustomRoles(tt.input)
+			out := expandCustomRoles(tt.input)
 			if !reflect.DeepEqual(out, tt.expOutput) {
 				t.Errorf("transfromCustomRoles - expected %s but got %s", tt.expOutput, out)
 			}

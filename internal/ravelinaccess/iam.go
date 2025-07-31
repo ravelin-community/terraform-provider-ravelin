@@ -10,37 +10,55 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// RavelinAccess represents the access configuration at Ravelin, it can describe
+// the access to multiple services and platforms for a user or a workspace group.
 type RavelinAccess struct {
-	Email    string
-	GCP      GCPAccess      `yaml:"gcp,omitempty"`      // GCP IAM roles and groups
-	Gsudo    GsudoAccess    `yaml:"gsudo,omitempty"`    // gsudo configuration for the user
-	Twingate TwingateAccess `yaml:"twingate,omitempty"` // Twingate access configuration for the user
+	// Email is the email of the user or group.
+	Email string
+	// IsGroup indicates if the ravelin access is for a group or a user.
+	IsGroup bool
+
+	// GCP represents the GCP IAM roles and groups for the user or group. For now it only supports
+	// the groups. Only users can be part of groups, groups cannot be part of other groups.
+	GCP GCPAccess `yaml:"gcp,omitempty"`
+	// Gsudo represents the gsudo configuration for the user or group.
+	Gsudo GsudoAccess `yaml:"gsudo,omitempty"`
+	// Twingate represents the Twingate access configuration for the user or group.
+	Twingate TwingateAccess `yaml:"twingate,omitempty"`
 }
 
+// GsudoAccess represents the gsudo configuration for a user or a group.
 type GsudoAccess struct {
-	Escalations map[string][]string `yaml:"escalations"` // list of escalation roles per project
-	Inherit     bool                `yaml:"inherit"`     // whether the roles are inherited from a group
+	// Escalations is a map of project names to a list of escalation roles.
+	Escalations map[string][]string `yaml:"escalations"`
+	// Inherit indicates if escalations are inherited from the user's group. Inheritance is only
+	// supported for users.
+	Inherit bool `yaml:"inherit"`
 }
 
+// GCPAccess represents the GCP IAM roles and groups for a user or a group.
 type GCPAccess struct {
-	Groups []string `yaml:"groups,omitempty"` // list of google workspace groups the user belongs to
+	// Groups is a list of google workspace groups the user belongs to.
+	Groups []string `yaml:"groups,omitempty"`
 }
 
+// TwingateAccess represents the Twingate access configuration for a user or a group.
 type TwingateAccess struct {
-	Enabled *bool `yaml:"enabled,omitempty"` // whether the user has Twingate access
-	Admin   *bool `yaml:"admin,omitempty"`   // whether the user has Twingate admin access
+	// Enabled indicates if the user has Twingate access.
+	Enabled *bool `yaml:"enabled,omitempty"`
+	// Admin indicates if the user has Twingate admin access.
+	Admin *bool `yaml:"admin,omitempty"`
 }
 
-func ExtractEntityAccess(yaml []byte, fileName string) (RavelinAccess, error) {
-
-	var user RavelinAccess
-	err := user.extractAccess(yaml)
+func ExtractEntityRavelinAccess(yaml []byte, fileName string) (RavelinAccess, error) {
+	var acc RavelinAccess
+	err := acc.extractAccess(yaml)
 	if err != nil {
 		return RavelinAccess{}, fmt.Errorf("error extracting user access: %v", err)
 	}
 
-	user.Email = userFileToEmail(fileName)
-	return user, nil
+	acc.Email = userFileToEmail(fileName)
+	return acc, nil
 }
 
 func (user *RavelinAccess) InheritGroupEscalations(groupYamls map[int][]byte) error {
@@ -72,7 +90,7 @@ func (a *RavelinAccess) extractAccess(data []byte) error {
 	}
 
 	// Ensure custom roles are transformed to full GCP role names
-	a.Gsudo.Escalations = transformCustomRoles(a.Gsudo.Escalations)
+	a.Gsudo.Escalations = expandCustomRoles(a.Gsudo.Escalations)
 
 	return nil
 }
@@ -110,11 +128,14 @@ func dedupSlices(s []string) []string {
 	return result
 }
 
-func transformCustomRoles(m map[string][]string) map[string][]string {
-	for p, roles := range m {
+// expandCustomRoles expands custom roles from their short form to the full GCP
+// project level custom role reference. It takes as input a map or project to a
+// list of roles and returns the same map with the custom roles expanded.
+func expandCustomRoles(m map[string][]string) map[string][]string {
+	for project, roles := range m {
 		for i, role := range roles {
 			if strings.HasPrefix(role, "custom/") {
-				roles[i] = fmt.Sprintf("projects/%s/roles%s", p, strings.Trim(role, "custom"))
+				roles[i] = fmt.Sprintf("projects/%s/roles/%s", project, role[7:])
 			}
 		}
 	}
