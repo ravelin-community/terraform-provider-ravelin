@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"os"
 	"strconv"
 	"time"
 
@@ -64,64 +65,125 @@ func (d *GsudoEscalationsDataSource) Read(ctx context.Context, req datasource.Re
 		return
 	}
 
-	allUserAccess, err := iam.ExtractUserAccess(ctx, iamPath)
+	err, userFiles := getUserFiles(iamPath)
 	if err != nil {
-		resp.Diagnostics.AddError("failed to extract user access", err.Error())
+		resp.Diagnostics.AddError("failed to retrieve user files", err.Error())
 		return
 	}
-
-	allUsersEscalations := make(map[string]basetypes.MapValue, len(allUserAccess))
-
-	for _, userAccess := range allUserAccess {
-
-		if len(userAccess.Gsudo.Escalations) == 0 {
-			tflog.Info(ctx, fmt.Sprintf("Skipping user %s with no escalations defined", userAccess.Email))
-			continue
-		}
-
-		userEscalationsMap := make(map[string]basetypes.ListValue, len(userAccess.Gsudo.Escalations))
-
-		for p, r := range userAccess.Gsudo.Escalations {
-			escalationRoles := make([]types.String, len(r))
-			for i, role := range r {
-				escalationRoles[i] = types.StringValue(role)
+	allUserAccess := make([]iam.RavelinAccess, 0, len(userFiles))
+	for _, userFile := range userFiles {
+		yaml, err := readYamlFile(fmt.Sprintf("%s/users/%s", iamPath, userFile))
+		userAccess, err := iam.ExtractEntityAccess(yaml, userFile)
+		groupYamls := make(map[int][]byte)
+		for i, g := range userAccess.GCP.Groups {
+			groupYaml, err := readYamlFile(fmt.Sprintf("%s/groups/%s.yml", iamPath, g))
+			if err != nil {
+				resp.Diagnostics.AddError(
+					"failed to read group YAML file",
+					fmt.Sprintf("error reading group YAML file for group '%s': %v", g, err),
+				)
+				return
 			}
-			listVal, diags := types.ListValueFrom(ctx, types.StringType, escalationRoles)
-			resp.Diagnostics.Append(diags...)
-			userEscalationsMap[p] = listVal
+			groupYamls[i] = groupYaml
 		}
-
-		mapVal, diags := types.MapValueFrom(ctx, types.ListType{ElemType: types.StringType}, userEscalationsMap)
-		resp.Diagnostics.Append(diags...)
-		allUsersEscalations[userAccess.Email] = mapVal
-	}
-
-	if resp.Diagnostics.HasError() {
-		resp.Diagnostics.AddError(
-			"error processing escalations",
-			"an error occurred while processing the user escalations, please check the IAM path and ensure it contains valid user and group definitions.",
-		)
-		return
-	}
-
-	resp.State.SetAttribute(ctx, path.Root("id"), types.StringValue(strconv.FormatInt(time.Now().Unix(), 10)))
-
-	if userEmail := data.UserEmail.ValueString(); userEmail != "" {
-		userEscalations := make(map[string]basetypes.MapValue, 1)
-
-		if _, found := allUsersEscalations[userEmail]; found {
-			userEscalations[userEmail] = allUsersEscalations[userEmail]
-		} else {
-			resp.Diagnostics.AddWarning(
-				"user email not found",
-				fmt.Sprintf("the specified user email '%s' does not have any escalations defined, returning empty escalations.", userEmail),
+		if len(groupYamls) > 0 {
+			if err := userAccess.InheritGroupEscalations(groupYamls); err != nil {
+				resp.Diagnostics.AddError(
+					"failed to inherit group access",
+					fmt.Sprintf("error inheriting access from groups: %v", err),
+				)
+				return
+			}
+		}
+		allUserAccess = append(allUserAccess, userAccess)
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"failed to extract user access",
+				fmt.Sprintf("error extracting access for user '%s': %v", userFile, err),
 			)
+			return
 		}
 
-		resp.State.SetAttribute(ctx, path.Root("escalations"), userEscalations)
-		return
+		allUsersEscalations := make(map[string]basetypes.MapValue, len(allUserAccess))
 
+		for _, userAccess := range allUserAccess {
+
+			if len(userAccess.Gsudo.Escalations) == 0 {
+				tflog.Info(ctx, fmt.Sprintf("Skipping user %s with no escalations defined", userAccess.Email))
+				continue
+			}
+
+			userEscalationsMap := make(map[string]basetypes.ListValue, len(userAccess.Gsudo.Escalations))
+
+			for p, r := range userAccess.Gsudo.Escalations {
+				escalationRoles := make([]types.String, len(r))
+				for i, role := range r {
+					escalationRoles[i] = types.StringValue(role)
+				}
+				listVal, diags := types.ListValueFrom(ctx, types.StringType, escalationRoles)
+				resp.Diagnostics.Append(diags...)
+				userEscalationsMap[p] = listVal
+			}
+
+			mapVal, diags := types.MapValueFrom(ctx, types.ListType{ElemType: types.StringType}, userEscalationsMap)
+			resp.Diagnostics.Append(diags...)
+			allUsersEscalations[userAccess.Email] = mapVal
+		}
+
+		if resp.Diagnostics.HasError() {
+			resp.Diagnostics.AddError(
+				"error processing escalations",
+				"an error occurred while processing the user escalations, please check the IAM path and ensure it contains valid user and group definitions.",
+			)
+			return
+		}
+
+		resp.State.SetAttribute(ctx, path.Root("id"), types.StringValue(strconv.FormatInt(time.Now().Unix(), 10)))
+
+		if userEmail := data.UserEmail.ValueString(); userEmail != "" {
+			userEscalations := make(map[string]basetypes.MapValue, 1)
+
+			if _, found := allUsersEscalations[userEmail]; found {
+				userEscalations[userEmail] = allUsersEscalations[userEmail]
+			} else {
+				resp.Diagnostics.AddWarning(
+					"user email not found",
+					fmt.Sprintf("the specified user email '%s' does not have any escalations defined, returning empty escalations.", userEmail),
+				)
+			}
+
+			resp.State.SetAttribute(ctx, path.Root("escalations"), userEscalations)
+			return
+
+		}
+
+		resp.State.SetAttribute(ctx, path.Root("escalations"), allUsersEscalations)
+	}
+}
+
+func getUserFiles(iamDirectory string) (error, []string) {
+	files, err := os.ReadDir(fmt.Sprintf("%s/users", iamDirectory))
+	if err != nil {
+		return fmt.Errorf("error retrieving a list of user files from IAM directory: %v", err), nil
 	}
 
-	resp.State.SetAttribute(ctx, path.Root("escalations"), allUsersEscalations)
+	var userFiles []string
+	for _, file := range files {
+		if !file.IsDir() {
+			userFiles = append(userFiles, file.Name())
+		}
+	}
+
+	return nil, userFiles
+}
+
+func readYamlFile(filePath string) ([]byte, error) {
+	yamlFile, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("error reading YAML file %s: %v", filePath, err)
+	}
+	if len(yamlFile) == 0 {
+		return nil, fmt.Errorf("YAML file %s is empty", filePath)
+	}
+	return yamlFile, nil
 }

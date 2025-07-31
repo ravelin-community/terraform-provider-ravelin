@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -62,10 +63,37 @@ func (d *TwingateAccessDataSource) Read(ctx context.Context, req datasource.Read
 		return
 	}
 
-	allUserAccess, err := iam.ExtractUserAccess(ctx, iamPath)
+	err, userFiles := getUserFiles(iamPath)
 	if err != nil {
-		resp.Diagnostics.AddError("failed to extract user access", err.Error())
+		resp.Diagnostics.AddError("failed to retrieve user files", err.Error())
 		return
+	}
+
+	allUserAccess := make([]iam.RavelinAccess, 0, len(userFiles))
+
+	for _, userFile := range userFiles {
+		yaml, err := readYamlFile(fmt.Sprintf("%s/users/%s", iamPath, userFile))
+		userAccess, err := iam.ExtractEntityAccess(yaml, userFile)
+		if err != nil {
+			resp.Diagnostics.AddError("failed to extract user access", err.Error())
+			return
+		}
+		if userAccess.Twingate.Enabled != nil {
+			continue
+		}
+		groupYaml, err := readYamlFile(fmt.Sprintf("%s/groups/%s.yml", iamPath, userAccess.GCP.Groups[0]))
+		if err != nil {
+			resp.Diagnostics.AddError("failed to read group YAML file", err.Error())
+			return
+		}
+		group, err := iam.ExtractEntityAccess(groupYaml, userAccess.GCP.Groups[0])
+		if err != nil {
+			resp.Diagnostics.AddError("failed to extract group access", err.Error())
+			return
+		}
+		userAccess.Twingate.Enabled = group.Twingate.Enabled
+
+		allUserAccess = append(allUserAccess, userAccess)
 	}
 
 	twingateAccess := make(map[string]models.TwingateAccessModel)

@@ -1,15 +1,12 @@
 package ravelinaccess
 
 import (
-	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
 	"slices"
 
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"gopkg.in/yaml.v3"
 )
 
@@ -34,114 +31,50 @@ type TwingateAccess struct {
 	Admin   *bool `yaml:"admin,omitempty"`   // whether the user has Twingate admin access
 }
 
-func ExtractUserAccess(ctx context.Context, iamDirectory string) ([]RavelinAccess, error) {
-	users := make([]RavelinAccess, 0, 200) // Preallocate slice for 200 users
-	err, userFiles := getUserFiles(iamDirectory)
+func ExtractEntityAccess(yaml []byte, fileName string) (RavelinAccess, error) {
+
+	var user RavelinAccess
+	err := user.extractAccess(yaml)
 	if err != nil {
-		return nil, fmt.Errorf("error getting user files:  %v", err)
+		return RavelinAccess{}, fmt.Errorf("error extracting user access: %v", err)
 	}
 
-	for _, userFile := range userFiles {
-		if !strings.HasSuffix(userFile, ".yml") {
-			tflog.Info(ctx, fmt.Sprintf("Skipping non-YAML file: %s", userFile))
-			continue
-		}
-
-		yaml, err := readYamlFile(fmt.Sprintf("%s/users/%s", iamDirectory, userFile))
-		if err != nil {
-			tflog.Error(ctx, fmt.Sprintf("error reading user file %s: %v", userFile, err))
-		}
-		if len(yaml) == 0 {
-			tflog.Info(ctx, fmt.Sprintf("Skipping empty user file: %s", userFile))
-			continue
-		}
-
-		user, err := exctractAccess(yaml)
-		if err != nil {
-			tflog.Error(ctx, fmt.Sprintf("error extracting user access: %v", err))
-		}
-
-		user.Email = userFileToEmail(userFile)
-
-		for _, g := range user.GCP.Groups {
-			yaml, err := readYamlFile(fmt.Sprintf("%s/groups/%s.yml", iamDirectory, g))
-			if err != nil {
-				tflog.Error(ctx, fmt.Sprintf("error reading group file %s: %v", g, err))
-			}
-			if len(yaml) == 0 {
-				tflog.Info(ctx, fmt.Sprintf("Skipping empty group file: %s", g))
-				continue
-			}
-
-			group, err := exctractAccess(yaml)
-			if err != nil {
-				tflog.Error(ctx, fmt.Sprintf("error extracting group access for %s: %v", g, err))
-			}
-
-			if user.Gsudo.Inherit {
-				// Users inherit escalations from the first group only
-				user.Gsudo.Escalations = MergeMapsOfSlices(user.Gsudo.Escalations, group.Gsudo.Escalations)
-			}
-
-			if user.Twingate.Enabled != nil {
-				continue
-			}
-			// If Twingate access is not set, inherit it from the group
-			user.Twingate = group.Twingate
-
-		}
-
-		users = append(users, user)
-	}
-	return users, nil
+	user.Email = userFileToEmail(fileName)
+	return user, nil
 }
 
-func getUserFiles(iamDirectory string) (error, []string) {
-	files, err := os.ReadDir(fmt.Sprintf("%s/users", iamDirectory))
-	if err != nil {
-		return fmt.Errorf("error retrieving a list of user files from IAM directory: %v", err), nil
-	}
-
-	var userFiles []string
-	for _, file := range files {
-		if !file.IsDir() {
-			userFiles = append(userFiles, file.Name())
+func (user *RavelinAccess) InheritGroupEscalations(groupYamls map[int][]byte) error {
+	for _, groupYaml := range groupYamls {
+		var group RavelinAccess
+		if err := group.extractAccess(groupYaml); err != nil {
+			return fmt.Errorf("error extracting group access: %v", err)
 		}
-	}
+		if user.Gsudo.Inherit {
+			user.Gsudo.Escalations = MergeMapsOfSlices(user.Gsudo.Escalations, group.Gsudo.Escalations)
+		}
 
-	return nil, userFiles
+	}
+	return nil
 }
 
-func readYamlFile(filePath string) ([]byte, error) {
-	yamlFile, err := os.ReadFile(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("error reading YAML file %s: %v", filePath, err)
-	}
-	if len(yamlFile) == 0 {
-		return nil, fmt.Errorf("YAML file %s is empty", filePath)
-	}
-	return yamlFile, nil
-}
+func (a *RavelinAccess) extractAccess(data []byte) error {
 
-func exctractAccess(data []byte) (RavelinAccess, error) {
-	var access RavelinAccess
-
-	if err := yaml.Unmarshal(data, &access); err != nil {
-		return access, fmt.Errorf("error unmarshaling IAM file: %v", err)
+	if err := yaml.Unmarshal(data, &a); err != nil {
+		return fmt.Errorf("error unmarshaling IAM file: %v", err)
 	}
 
-	if access.Gsudo.Escalations == nil {
-		access.Gsudo.Escalations = make(map[string][]string)
+	if a.Gsudo.Escalations == nil {
+		a.Gsudo.Escalations = make(map[string][]string)
 	}
 
-	if access.GCP.Groups == nil {
-		access.GCP.Groups = make([]string, 0)
+	if a.GCP.Groups == nil {
+		a.GCP.Groups = make([]string, 0)
 	}
 
 	// Ensure custom roles are transformed to full GCP role names
-	access.Gsudo.Escalations = transformCustomRoles(access.Gsudo.Escalations)
+	a.Gsudo.Escalations = transformCustomRoles(a.Gsudo.Escalations)
 
-	return access, nil
+	return nil
 }
 
 func userFileToEmail(file string) string {
