@@ -1,24 +1,25 @@
 package ravelinaccess
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/require"
 )
 
 func TestExtractRavelinAccess(t *testing.T) {
 	tests := []struct {
 		name     string
-		input    string
-		file     string
+		input    map[string][]byte
 		expected RavelinAccess
-		user     RavelinAccess
 		expError string
 	}{
 		{
-			name: "normal usage",
-			input: `
+			name: "normal_user_usage",
+			input: map[string][]byte{
+				"users/john_doe.yml": []byte(`
 gcp:
   groups:
     - group
@@ -27,8 +28,10 @@ gsudo:
   escalations:
     test-user-project:
       - roles/owner
-`,
+`)},
 			expected: RavelinAccess{
+				Email: "john.doe@ravelin.com",
+				Type:  USER,
 				GCP: GCPAccess{
 					Groups: []string{"group"},
 				},
@@ -36,31 +39,12 @@ gsudo:
 					Inherit:     true,
 					Escalations: map[string][]string{"test-user-project": {"roles/owner"}},
 				},
-			}},
+			},
+		},
 		{
-			name: "false inherit",
-			input: `
-gcp:
-  groups:
-    - group
-gsudo:
-  inherit: false
-  escalations:
-    test-user-project:
-      - roles/owner
-`,
-			expected: RavelinAccess{
-				GCP: GCPAccess{
-					Groups: []string{"group"},
-				},
-				Gsudo: GsudoAccess{
-					Inherit:     false,
-					Escalations: map[string][]string{"test-user-project": {"roles/owner"}},
-				},
-			}},
-		{
-			name: "multiple escalations",
-			input: `
+			name: "multiple_escalations",
+			input: map[string][]byte{
+				"users/john_doe.yml": []byte(`
 gcp:
   groups:
     - group
@@ -72,8 +56,10 @@ gsudo:
       - roles/editor
     test-project:
       - roles/editor
-`,
+`)},
 			expected: RavelinAccess{
+				Email: "john.doe@ravelin.com",
+				Type:  USER,
 				GCP: GCPAccess{
 					Groups: []string{"group"},
 				},
@@ -82,10 +68,12 @@ gsudo:
 					Escalations: map[string][]string{"test-user-project": {"roles/owner", "roles/editor"},
 						"test-project": {"roles/editor"}},
 				},
-			}},
+			},
+		},
 		{
-			name: "multiple groups",
-			input: `
+			name: "multiple_groups",
+			input: map[string][]byte{
+				"users/john_doe.yml": []byte(`
 gcp:
   groups:
     - group
@@ -96,8 +84,10 @@ gsudo:
     test-user-project:
       - roles/owner
       - roles/editor
-`,
+`)},
 			expected: RavelinAccess{
+				Email: "john.doe@ravelin.com",
+				Type:  USER,
 				GCP: GCPAccess{
 					Groups: []string{"group", "another-group"},
 				},
@@ -105,12 +95,15 @@ gsudo:
 					Inherit:     false,
 					Escalations: map[string][]string{"test-user-project": {"roles/owner", "roles/editor"}},
 				},
-			}},
+			},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := tt.user.extractAccess([]byte(tt.input))
+			dir := createTempFiles(t, tt.input)
+
+			user, err := ExtractRavelinAccess(filepath.Join(dir, "users/john_doe.yml"))
 			if tt.expError == "" {
 				require.NoError(t, err)
 			}
@@ -118,7 +111,7 @@ gsudo:
 				require.ErrorContains(t, err, tt.expError)
 			}
 
-			if diff := cmp.Diff(tt.user, tt.expected); diff != "" {
+			if diff := cmp.Diff(user, tt.expected, cmpopts.IgnoreUnexported(RavelinAccess{})); diff != "" {
 				t.Errorf("expected ravelin access data (+) but got (-), %s", diff)
 			}
 

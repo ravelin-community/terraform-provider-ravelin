@@ -84,10 +84,10 @@ func (d *TwingateAccessDataSource) Read(ctx context.Context, req datasource.Read
 
 		// if after inheritance the user access is not set, set it to false
 		if userAccess.Twingate.Enabled == nil {
-			*userAccess.Twingate.Enabled = false
+			userAccess.Twingate.Enabled = new(bool)
 		}
 		if userAccess.Twingate.Admin == nil {
-			*userAccess.Twingate.Admin = false
+			userAccess.Twingate.Admin = new(bool)
 		}
 
 		allUserAccess = append(allUserAccess, userAccess)

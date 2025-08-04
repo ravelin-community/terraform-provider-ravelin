@@ -32,23 +32,32 @@ func TestUserFileToEmail(t *testing.T) {
 	tests := []struct {
 		name      string
 		input     string
+		typ       EntityType
 		expOutput string
 	}{
 		{
-			name:      "normal usage",
+			name:      "user_file",
 			input:     "/mnt/c/iam/users/john_doe.yaml",
+			typ:       USER,
 			expOutput: "john.doe@ravelin.com",
 		},
 		{
-			name:      "check hyphens in name",
+			name:      "check_hyphens_in_name",
 			input:     "../../iam/users/marie-josette_doe.yaml",
+			typ:       USER,
 			expOutput: "marie-josette.doe@ravelin.com",
+		},
+		{
+			name:      "group_file",
+			input:     "/mnt/c/iam/groups/group_name.yaml",
+			typ:       GROUP,
+			expOutput: "gcp-group_name@ravelin.com",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			out, err := fileToEmail(tt.input, USER)
+			out, err := fileToEmail(tt.input, tt.typ)
 			if err != nil {
 				t.Errorf("fileToEmail - error: %v", err)
 			}

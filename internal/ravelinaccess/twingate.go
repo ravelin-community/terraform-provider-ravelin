@@ -51,7 +51,7 @@ func (a *RavelinAccess) InheritTwingateAccess() error {
 		a.Twingate.Enabled = group.Twingate.Enabled
 	}
 
-	if *a.Twingate.Enabled && group.Twingate.Admin != nil && a.Twingate.Admin == nil {
+	if a.Twingate.Enabled != nil && *a.Twingate.Enabled && group.Twingate.Admin != nil && a.Twingate.Admin == nil {
 		a.Twingate.Admin = group.Twingate.Admin
 	}
 

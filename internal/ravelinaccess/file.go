@@ -59,7 +59,7 @@ func fileToEmail(file string, typ EntityType) (string, error) {
 		if len(parts) != 2 {
 			return "", fmt.Errorf("invalid user file: %s, expected format: <name>_<surname>.yml", file)
 		}
-		return parts[0] + "@ravelin.com", nil
+		return strings.ReplaceAll(parts[0], "_", ".") + "@ravelin.com", nil
 
 	case GROUP:
 		parts := strings.Split(filepath.Base(file), ".")
