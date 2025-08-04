@@ -35,7 +35,7 @@ func (a *RavelinAccess) InheritTwingateAccess() error {
 
 	groupFile := filepath.Join(filepath.Dir(a.filePath), "..", "groups", primaryGroupFile)
 
-	data, err := ReadFile(groupFile)
+	data, err := readFile(groupFile)
 	if err != nil {
 		return fmt.Errorf("error reading group file %s: %w", groupFile, err)
 	}
