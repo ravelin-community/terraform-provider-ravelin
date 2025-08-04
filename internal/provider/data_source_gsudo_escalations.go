@@ -82,13 +82,6 @@ func (d *GsudoEscalationsDataSource) Read(ctx context.Context, req datasource.Re
 		}
 
 		allUserAccess = append(allUserAccess, userAccess)
-		if err != nil {
-			resp.Diagnostics.AddError(
-				"failed to extract user access",
-				fmt.Sprintf("error extracting access for user '%s': %v", userFile, err),
-			)
-			return
-		}
 	}
 
 	allEscalations := convertEscalationsToMap(ctx, allUserAccess, resp)
