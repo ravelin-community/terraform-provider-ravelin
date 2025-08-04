@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"os"
 	"strconv"
 	"time"
 
@@ -12,14 +11,11 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/ravelin-community/terraform-provider-ravelin/internal/models"
 	iam "github.com/ravelin-community/terraform-provider-ravelin/internal/ravelinaccess"
 )
 
-type GsudoEscalationsDataSource struct {
-	provider *ravelinProvider
-}
+type GsudoEscalationsDataSource struct{}
 
 func (r *GsudoEscalationsDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_gsudo_escalations"
@@ -53,10 +49,10 @@ func (r *GsudoEscalationsDataSource) Schema(ctx context.Context, req datasource.
 }
 
 func (d *GsudoEscalationsDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
-	var data models.GsudoEscalationsDataSourceModel
+	var rData models.GsudoEscalationsDataSourceModel
 
-	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
-	iamPath := data.IamPath.ValueString()
+	resp.Diagnostics.Append(req.Config.Get(ctx, &rData)...)
+	iamPath := rData.IamPath.ValueString()
 	if iamPath == "" {
 		resp.Diagnostics.AddError(
 			"missing IAM path",
@@ -65,36 +61,26 @@ func (d *GsudoEscalationsDataSource) Read(ctx context.Context, req datasource.Re
 		return
 	}
 
-	err, userFiles := getUserFiles(iamPath)
+	userFiles, err := iam.GetUserFiles(iamPath)
 	if err != nil {
 		resp.Diagnostics.AddError("failed to retrieve user files", err.Error())
 		return
 	}
+
 	allUserAccess := make([]iam.RavelinAccess, 0, len(userFiles))
 	for _, userFile := range userFiles {
-		yaml, err := readYamlFile(fmt.Sprintf("%s/users/%s", iamPath, userFile))
-		userAccess, err := iam.ExtractEntityAccess(yaml, userFile)
-		groupYamls := make(map[int][]byte)
-		for i, g := range userAccess.GCP.Groups {
-			groupYaml, err := readYamlFile(fmt.Sprintf("%s/groups/%s.yml", iamPath, g))
-			if err != nil {
-				resp.Diagnostics.AddError(
-					"failed to read group YAML file",
-					fmt.Sprintf("error reading group YAML file for group '%s': %v", g, err),
-				)
-				return
-			}
-			groupYamls[i] = groupYaml
+		userAccess, err := iam.ExtractRavelinAccess(fmt.Sprintf("%s/users/%s", iamPath, userFile))
+		if err != nil {
+			resp.Diagnostics.AddError("failed to extract user access", err.Error())
+			return
 		}
-		if len(groupYamls) > 0 {
-			if err := userAccess.InheritGroupEscalations(groupYamls); err != nil {
-				resp.Diagnostics.AddError(
-					"failed to inherit group access",
-					fmt.Sprintf("error inheriting access from groups: %v", err),
-				)
-				return
-			}
+
+		err = userAccess.InheritGsudoAccess()
+		if err != nil {
+			resp.Diagnostics.AddError("failed to inherit gsudo access", err.Error())
+			return
 		}
+
 		allUserAccess = append(allUserAccess, userAccess)
 		if err != nil {
 			resp.Diagnostics.AddError(
@@ -103,87 +89,65 @@ func (d *GsudoEscalationsDataSource) Read(ctx context.Context, req datasource.Re
 			)
 			return
 		}
+	}
 
-		allUsersEscalations := make(map[string]basetypes.MapValue, len(allUserAccess))
+	allEscalations := convertEscalationsToMap(ctx, allUserAccess, resp)
 
-		for _, userAccess := range allUserAccess {
+	if resp.Diagnostics.HasError() {
+		resp.Diagnostics.AddError(
+			"error processing escalations",
+			"an error occurred while processing the user escalations, please check the IAM path and ensure it contains valid user and group definitions.",
+		)
+		return
+	}
+	resp.State.SetAttribute(ctx, path.Root("id"), types.StringValue(strconv.FormatInt(time.Now().Unix(), 10)))
 
-			if len(userAccess.Gsudo.Escalations) == 0 {
-				tflog.Info(ctx, fmt.Sprintf("Skipping user %s with no escalations defined", userAccess.Email))
-				continue
-			}
+	if emailFilter := rData.UserEmail.ValueString(); emailFilter != "" {
+		userEscalations := make(map[string]basetypes.MapValue, 1)
 
-			userEscalationsMap := make(map[string]basetypes.ListValue, len(userAccess.Gsudo.Escalations))
-
-			for p, r := range userAccess.Gsudo.Escalations {
-				escalationRoles := make([]types.String, len(r))
-				for i, role := range r {
-					escalationRoles[i] = types.StringValue(role)
-				}
-				listVal, diags := types.ListValueFrom(ctx, types.StringType, escalationRoles)
-				resp.Diagnostics.Append(diags...)
-				userEscalationsMap[p] = listVal
-			}
-
-			mapVal, diags := types.MapValueFrom(ctx, types.ListType{ElemType: types.StringType}, userEscalationsMap)
-			resp.Diagnostics.Append(diags...)
-			allUsersEscalations[userAccess.Email] = mapVal
-		}
-
-		if resp.Diagnostics.HasError() {
-			resp.Diagnostics.AddError(
-				"error processing escalations",
-				"an error occurred while processing the user escalations, please check the IAM path and ensure it contains valid user and group definitions.",
+		if _, found := allEscalations[emailFilter]; found {
+			userEscalations[emailFilter] = allEscalations[emailFilter]
+		} else {
+			resp.Diagnostics.AddWarning(
+				"user email not found",
+				fmt.Sprintf("the specified user email '%s' does not have any escalations defined, returning empty escalations.", emailFilter),
 			)
-			return
 		}
 
-		resp.State.SetAttribute(ctx, path.Root("id"), types.StringValue(strconv.FormatInt(time.Now().Unix(), 10)))
+		resp.State.SetAttribute(ctx, path.Root("escalations"), userEscalations)
+		return
+	}
 
-		if userEmail := data.UserEmail.ValueString(); userEmail != "" {
-			userEscalations := make(map[string]basetypes.MapValue, 1)
+	resp.State.SetAttribute(ctx, path.Root("escalations"), allEscalations)
+}
 
-			if _, found := allUsersEscalations[userEmail]; found {
-				userEscalations[userEmail] = allUsersEscalations[userEmail]
-			} else {
-				resp.Diagnostics.AddWarning(
-					"user email not found",
-					fmt.Sprintf("the specified user email '%s' does not have any escalations defined, returning empty escalations.", userEmail),
-				)
+// convertEscalationsToMap converts the escalations from the RavelinAccess
+// struct to the native terraform types.
+func convertEscalationsToMap(ctx context.Context, userAccess []iam.RavelinAccess, resp *datasource.ReadResponse) map[string]basetypes.MapValue {
+	allEscalations := make(map[string]basetypes.MapValue, len(userAccess))
+
+	for _, access := range userAccess {
+		if len(access.Gsudo.Escalations) == 0 {
+			continue
+		}
+
+		escalationMap := make(map[string]basetypes.ListValue, len(access.Gsudo.Escalations))
+
+		for project, roles := range access.Gsudo.Escalations {
+			escalationRoles := make([]types.String, len(roles))
+			for i, role := range roles {
+				escalationRoles[i] = types.StringValue(role)
 			}
 
-			resp.State.SetAttribute(ctx, path.Root("escalations"), userEscalations)
-			return
-
+			listVal, diags := types.ListValueFrom(ctx, types.StringType, escalationRoles)
+			resp.Diagnostics.Append(diags...)
+			escalationMap[project] = listVal
 		}
 
-		resp.State.SetAttribute(ctx, path.Root("escalations"), allUsersEscalations)
-	}
-}
-
-func getUserFiles(iamDirectory string) (error, []string) {
-	files, err := os.ReadDir(fmt.Sprintf("%s/users", iamDirectory))
-	if err != nil {
-		return fmt.Errorf("error retrieving a list of user files from IAM directory: %v", err), nil
+		mapVal, diags := types.MapValueFrom(ctx, types.ListType{ElemType: types.StringType}, escalationMap)
+		resp.Diagnostics.Append(diags...)
+		allEscalations[access.Email] = mapVal
 	}
 
-	var userFiles []string
-	for _, file := range files {
-		if !file.IsDir() {
-			userFiles = append(userFiles, file.Name())
-		}
-	}
-
-	return nil, userFiles
-}
-
-func readYamlFile(filePath string) ([]byte, error) {
-	yamlFile, err := os.ReadFile(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("error reading YAML file %s: %v", filePath, err)
-	}
-	if len(yamlFile) == 0 {
-		return nil, fmt.Errorf("YAML file %s is empty", filePath)
-	}
-	return yamlFile, nil
+	return allEscalations
 }
