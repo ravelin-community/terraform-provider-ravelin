@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -13,9 +14,7 @@ import (
 	iam "github.com/ravelin-community/terraform-provider-ravelin/internal/ravelinaccess"
 )
 
-type TwingateAccessDataSource struct {
-	provider *ravelinProvider
-}
+type TwingateAccessDataSource struct{}
 
 func (r *TwingateAccessDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_twingate_access"
@@ -62,23 +61,40 @@ func (d *TwingateAccessDataSource) Read(ctx context.Context, req datasource.Read
 		return
 	}
 
-	allUserAccess, err := iam.ExtractUserAccess(ctx, iamPath)
+	userFiles, err := iam.GetUserFiles(iamPath)
 	if err != nil {
-		resp.Diagnostics.AddError("failed to extract user access", err.Error())
+		resp.Diagnostics.AddError("failed to retrieve user files", err.Error())
 		return
 	}
 
-	twingateAccess := make(map[string]models.TwingateAccessModel)
-	for _, userAccess := range allUserAccess {
+	allUserAccess := make([]iam.RavelinAccess, 0, len(userFiles))
 
+	for _, userFile := range userFiles {
+		userAccess, err := iam.ExtractRavelinAccess(fmt.Sprintf("%s/users/%s", iamPath, userFile))
+		if err != nil {
+			resp.Diagnostics.AddError("failed to extract user access", err.Error())
+			return
+		}
+
+		err = userAccess.InheritTwingateAccess()
+		if err != nil {
+			resp.Diagnostics.AddError("failed to inherit twingate access", err.Error())
+			return
+		}
+
+		// if after inheritance the user access is not set, set it to false
 		if userAccess.Twingate.Enabled == nil {
 			userAccess.Twingate.Enabled = new(bool)
 		}
-
 		if userAccess.Twingate.Admin == nil {
 			userAccess.Twingate.Admin = new(bool)
 		}
 
+		allUserAccess = append(allUserAccess, userAccess)
+	}
+
+	twingateAccess := make(map[string]models.TwingateAccessModel)
+	for _, userAccess := range allUserAccess {
 		if *userAccess.Twingate.Enabled {
 
 			if !data.UserEmail.IsNull() && data.UserEmail.ValueString() != userAccess.Email {
@@ -92,9 +108,7 @@ func (d *TwingateAccessDataSource) Read(ctx context.Context, req datasource.Read
 		}
 	}
 
-	dataTwingateAccess, diags := types.MapValueFrom(ctx, types.ObjectType{
-		AttrTypes: models.TwingateAccessAttrTypes,
-	}, twingateAccess)
+	dataTwingateAccess, diags := types.MapValueFrom(ctx, types.ObjectType{AttrTypes: models.TwingateAccessAttrTypes}, twingateAccess)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -103,5 +117,4 @@ func (d *TwingateAccessDataSource) Read(ctx context.Context, req datasource.Read
 	data.Id = types.StringValue(strconv.FormatInt(time.Now().Unix(), 10))
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
-
 }
