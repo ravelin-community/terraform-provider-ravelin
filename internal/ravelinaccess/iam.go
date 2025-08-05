@@ -2,65 +2,77 @@ package ravelinaccess
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
-
-	"slices"
 
 	"gopkg.in/yaml.v3"
 )
 
+// RavelinAccess can be assigned to an entity which can either be a user, a service
+// or a group.
+type EntityType int32
+
+const (
+	USER    EntityType = 0
+	GROUP   EntityType = 1
+	SERVICE EntityType = 2
+)
+
+// RavelinAccess represents the access configuration at Ravelin, it can describe
+// the access to multiple services and platforms for a user or a workspace group.
 type RavelinAccess struct {
-	Email    string
-	GCP      GCPAccess      `yaml:"gcp,omitempty"`      // GCP IAM roles and groups
-	Gsudo    GsudoAccess    `yaml:"gsudo,omitempty"`    // gsudo configuration for the user
-	Twingate TwingateAccess `yaml:"twingate,omitempty"` // Twingate access configuration for the user
+	// Email is the email of the user or group.
+	Email string
+	// Type indicates if the ravelin access is assigned to a user, a group or a service.
+	Type EntityType
+
+	// GCP represents the GCP IAM roles and groups for the user or group. For now it only supports
+	// the groups. Only users can be part of groups, groups cannot be part of other groups.
+	GCP GCPAccess `yaml:"gcp,omitempty"`
+	// Gsudo represents the gsudo configuration for the user or group.
+	Gsudo GsudoAccess `yaml:"gsudo,omitempty"`
+	// Twingate represents the Twingate access configuration for the user or group.
+	Twingate TwingateAccess `yaml:"twingate,omitempty"`
+
+	// Keeping track of original file
+	filePath string
 }
 
-type GsudoAccess struct {
-	Escalations map[string][]string `yaml:"escalations"` // list of escalation roles per project
-	Inherit     bool                `yaml:"inherit"`     // whether the roles are inherited from a group
-}
-
+// GCPAccess represents the GCP IAM roles and groups for a user or a group.
 type GCPAccess struct {
-	Groups []string `yaml:"groups,omitempty"` // list of google workspace groups the user belongs to
+	// Groups is a list of google workspace groups the user belongs to.
+	Groups []string `yaml:"groups,omitempty"`
 }
 
-type TwingateAccess struct {
-	Enabled *bool `yaml:"enabled,omitempty"` // whether the user has Twingate access
-	Admin   *bool `yaml:"admin,omitempty"`   // whether the user has Twingate admin access
-}
-
-func ExtractEntityAccess(yaml []byte, fileName string) (RavelinAccess, error) {
-
-	var user RavelinAccess
-	err := user.extractAccess(yaml)
+func ExtractRavelinAccess(filePath string) (RavelinAccess, error) {
+	data, err := readFile(filePath)
 	if err != nil {
-		return RavelinAccess{}, fmt.Errorf("error extracting user access: %v", err)
+		return RavelinAccess{}, fmt.Errorf("error reading file: %w", err)
 	}
 
-	user.Email = userFileToEmail(fileName)
-	return user, nil
-}
+	var acc RavelinAccess
+	acc.filePath = filePath
 
-func (user *RavelinAccess) InheritGroupEscalations(groupYamls map[int][]byte) error {
-	for _, groupYaml := range groupYamls {
-		var group RavelinAccess
-		if err := group.extractAccess(groupYaml); err != nil {
-			return fmt.Errorf("error extracting group access: %v", err)
-		}
-		if user.Gsudo.Inherit {
-			user.Gsudo.Escalations = MergeMapsOfSlices(user.Gsudo.Escalations, group.Gsudo.Escalations)
-		}
-
+	acc.Type, err = fileToType(filePath)
+	if err != nil {
+		return RavelinAccess{}, fmt.Errorf("error determining type of entity from file: %w", err)
 	}
-	return nil
+
+	acc.Email, err = fileToEmail(filePath, acc.Type)
+	if err != nil {
+		return RavelinAccess{}, fmt.Errorf("error determining email of file: %w", err)
+	}
+
+	err = acc.extractAccess(data)
+	if err != nil {
+		return RavelinAccess{}, fmt.Errorf("error extracting user access: %w", err)
+	}
+
+	return acc, nil
 }
 
 func (a *RavelinAccess) extractAccess(data []byte) error {
-
 	if err := yaml.Unmarshal(data, &a); err != nil {
-		return fmt.Errorf("error unmarshaling IAM file: %v", err)
+		return fmt.Errorf("error unmarshaling IAM file: %w", err)
 	}
 
 	if a.Gsudo.Escalations == nil {
@@ -72,49 +84,19 @@ func (a *RavelinAccess) extractAccess(data []byte) error {
 	}
 
 	// Ensure custom roles are transformed to full GCP role names
-	a.Gsudo.Escalations = transformCustomRoles(a.Gsudo.Escalations)
+	a.Gsudo.Escalations = expandCustomRoles(a.Gsudo.Escalations)
 
 	return nil
 }
 
-func userFileToEmail(file string) string {
-	return strings.ReplaceAll(strings.Split(filepath.Base(file), ".")[0], "_", ".") + "@ravelin.com"
-}
-
-// Alternative to maps.Copy when overwriting existing keys is not desired.
-func MergeMapsOfSlices[K comparable](dst, src map[K][]string) map[K][]string {
-	merged := make(map[K][]string, len(dst)+len(src))
-	for k, v := range dst {
-		merged[k] = dedupSlices(slices.Clone(v))
-	}
-	for k, vSrc := range src {
-		if vDst, exists := merged[k]; exists {
-			merged[k] = dedupSlices(slices.Concat(vDst, vSrc))
-		} else {
-			merged[k] = dedupSlices(slices.Clone(vSrc))
-		}
-	}
-	return merged
-}
-
-func dedupSlices(s []string) []string {
-	seen := make(map[string]struct{})
-	var result []string
-	result = make([]string, 0, len(s))
-	for _, v := range s {
-		if _, ok := seen[v]; !ok {
-			seen[v] = struct{}{}
-			result = append(result, v)
-		}
-	}
-	return result
-}
-
-func transformCustomRoles(m map[string][]string) map[string][]string {
-	for p, roles := range m {
+// expandCustomRoles expands custom roles from their short form to the full GCP
+// project level custom role reference. It takes as input a map or project to a
+// list of roles and returns the same map with the custom roles expanded.
+func expandCustomRoles(m map[string][]string) map[string][]string {
+	for project, roles := range m {
 		for i, role := range roles {
 			if strings.HasPrefix(role, "custom/") {
-				roles[i] = fmt.Sprintf("projects/%s/roles%s", p, strings.Trim(role, "custom"))
+				roles[i] = fmt.Sprintf("projects/%s/roles/%s", project, role[7:])
 			}
 		}
 	}
