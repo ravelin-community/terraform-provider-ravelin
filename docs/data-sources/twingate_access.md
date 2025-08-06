@@ -2,12 +2,12 @@
 page_title: "ravelin_twingate_access Data Source - terraform-provider-ravelin"
 subcategory: ""
 description: |-
-  
+  Get all twingate access for ravelin internal users.
 ---
 
 # ravelin_twingate_access (Data Source)
 
-
+Get all twingate access for ravelin internal users.
 
 This datasource is useful for internal usage at Ravelin Technologies. It opens a
 list of IAM yaml files which describe user access to our platform & tools to

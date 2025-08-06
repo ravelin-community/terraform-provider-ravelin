@@ -2,13 +2,12 @@
 page_title: "ravelin_gsudo_escalations Data Source - terraform-provider-ravelin"
 subcategory: ""
 description: |-
-  
+  Get all configured gsudo escalations for ravelin internal users.
 ---
 
 # ravelin_gsudo_escalations (Data Source)
 
-
-
+Get all configured gsudo escalations for ravelin internal users.
 
 This data source is useful for internal usage at Ravelin Technologies. It opens
 a list of IAM yaml files which describe user access to our platform & tools to
