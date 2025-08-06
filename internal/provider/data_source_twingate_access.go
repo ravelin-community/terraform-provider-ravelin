@@ -45,6 +45,7 @@ func (r *TwingateAccessDataSource) Schema(ctx context.Context, req datasource.Sc
 				Computed: true,
 			},
 		},
+		MarkdownDescription: "Get all twingate access for ravelin internal users.",
 	}
 }
 

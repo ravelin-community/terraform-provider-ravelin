@@ -45,6 +45,7 @@ func (r *GsudoEscalationsDataSource) Schema(ctx context.Context, req datasource.
 				Computed: true,
 			},
 		},
+		MarkdownDescription: "Get all configured gsudo escalations for ravelin internal users.",
 	}
 }
 
