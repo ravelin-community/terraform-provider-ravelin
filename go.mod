@@ -1,6 +1,6 @@
 module github.com/ravelin-community/terraform-provider-ravelin
 
-go 1.24
+go 1.24.0
 
 toolchain go1.24.5
 
@@ -9,17 +9,13 @@ require (
 	github.com/google/go-containerregistry v0.20.6
 	github.com/hashicorp/terraform-plugin-framework v1.15.1
 	github.com/hashicorp/terraform-plugin-go v0.28.0
-	github.com/hashicorp/terraform-plugin-log v0.9.0
 	github.com/hashicorp/terraform-plugin-testing v1.13.2
 	github.com/stretchr/testify v1.10.0
 	google.golang.org/api v0.244.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
-require (
-	github.com/distribution/reference v0.6.0 // indirect
-	github.com/magefile/mage v1.14.0 // indirect
-)
+require github.com/hashicorp/terraform-plugin-log v0.9.0 // indirect
 
 require (
 	cloud.google.com/go/auth v0.16.3 // indirect
@@ -49,7 +45,7 @@ require (
 	github.com/hashicorp/go-cty v1.5.0 // indirect
 	github.com/hashicorp/go-hclog v1.6.3 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
-	github.com/hashicorp/go-plugin v1.6.3 // indirect6e2f2e8a9ffa8a96602204cbca4d339e4df36486
+	github.com/hashicorp/go-plugin v1.6.3 // indirect; indirect6e2f2e8a9ffa8a96602204cbca4d339e4df36486
 	github.com/hashicorp/go-retryablehttp v0.7.8 // indirect
 	github.com/hashicorp/go-uuid v1.0.3 // indirect
 	github.com/hashicorp/go-version v1.7.0 // indirect
@@ -87,14 +83,14 @@ require (
 	go.opentelemetry.io/otel v1.37.0 // indirect
 	go.opentelemetry.io/otel/metric v1.37.0 // indirect
 	go.opentelemetry.io/otel/trace v1.37.0 // indirect
-	golang.org/x/crypto v0.40.0 // indirect
-	golang.org/x/mod v0.26.0 // indirect
-	golang.org/x/net v0.42.0 // indirect
+	golang.org/x/crypto v0.45.0 // indirect
+	golang.org/x/mod v0.29.0 // indirect
+	golang.org/x/net v0.47.0 // indirect
 	golang.org/x/oauth2 v0.30.0 // indirect
-	golang.org/x/sync v0.16.0 // indirect
-	golang.org/x/sys v0.34.0 // indirect
-	golang.org/x/text v0.27.0 // indirect
-	golang.org/x/tools v0.35.0 // indirect
+	golang.org/x/sync v0.18.0 // indirect
+	golang.org/x/sys v0.38.0 // indirect
+	golang.org/x/text v0.31.0 // indirect
+	golang.org/x/tools v0.38.0 // indirect
 	google.golang.org/appengine v1.6.8 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250804133106-a7a43d27e69b // indirect
 	google.golang.org/grpc v1.74.2 // indirect
