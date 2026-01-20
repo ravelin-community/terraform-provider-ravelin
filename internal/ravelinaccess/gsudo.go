@@ -10,9 +10,13 @@ import (
 type GsudoAccess struct {
 	// Escalations is a map of project names to a list of escalation roles.
 	Escalations map[string][]string `yaml:"escalations"`
-	// Inherit indicates if escalations are inherited from the user's group. Inheritance is only
-	// supported for users.
+	// Inherit indicates if escalations are inherited from the user's group.
+	// Inheritance is only supported for users.
 	Inherit bool `yaml:"inherit"`
+	// AccessPolicies indicates if the user or group has access to modify the access
+	// policies user bindings via gsudo. Note that this is a pointer as we might want
+	// to have "false" over a user override a group level access.
+	AccessPolicies *bool `yaml:"access-policies,omitempty"`
 }
 
 // InheritGsudoAccess inherits the gsudo escalations from the list of groups the user belongs to.
@@ -39,6 +43,11 @@ func (a *RavelinAccess) InheritGsudoAccess() error {
 		}
 
 		a.Gsudo.Escalations = mergeMapsOfSlices(a.Gsudo.Escalations, group.Gsudo.Escalations)
+
+		if a.Gsudo.AccessPolicies == nil {
+			a.Gsudo.AccessPolicies = group.Gsudo.AccessPolicies
+		}
+
 	}
 
 	return nil

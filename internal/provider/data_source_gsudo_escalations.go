@@ -37,6 +37,11 @@ func (r *GsudoEscalationsDataSource) Schema(ctx context.Context, req datasource.
 					},
 				},
 			},
+			"access_policies": schema.MapAttribute{
+				MarkdownDescription: "Indicates if the user has access to switch access context policies from enforce to dry-run mode.",
+				Computed:            true,
+				ElementType:         types.BoolType,
+			},
 			"user_email": schema.StringAttribute{
 				MarkdownDescription: "Email of the user to filter escalations for. If not specified, all users' escalations will be returned.",
 				Optional:            true,
@@ -86,6 +91,7 @@ func (d *GsudoEscalationsDataSource) Read(ctx context.Context, req datasource.Re
 	}
 
 	allEscalations := convertEscalationsToMap(ctx, allUserAccess, resp)
+	accessPolicies := convertAccessPoliciesToMap(allUserAccess)
 
 	if resp.Diagnostics.HasError() {
 		resp.Diagnostics.AddError(
@@ -98,21 +104,31 @@ func (d *GsudoEscalationsDataSource) Read(ctx context.Context, req datasource.Re
 
 	if emailFilter := rData.UserEmail.ValueString(); emailFilter != "" {
 		userEscalations := make(map[string]basetypes.MapValue, 1)
+		userAccessPolicies := make(map[string]types.Bool, 1)
 
-		if _, found := allEscalations[emailFilter]; found {
-			userEscalations[emailFilter] = allEscalations[emailFilter]
+		if accessPolicy, found := accessPolicies[emailFilter]; found {
+			userAccessPolicies[emailFilter] = accessPolicy
+			if escalation, foundEscalations := allEscalations[emailFilter]; foundEscalations {
+				userEscalations[emailFilter] = escalation
+			}
 		} else {
 			resp.Diagnostics.AddWarning(
 				"user email not found",
-				fmt.Sprintf("the specified user email '%s' does not have any escalations defined, returning empty escalations.", emailFilter),
+				fmt.Sprintf("the specified user email '%s' was not found in the IAM users, returning empty results.", emailFilter),
 			)
 		}
 
-		resp.State.SetAttribute(ctx, path.Root("escalations"), userEscalations)
+		accessPoliciesVal, diags := types.MapValueFrom(ctx, types.BoolType, userAccessPolicies)
+		resp.Diagnostics.Append(diags...)
+		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("access_policies"), accessPoliciesVal)...)
+		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("escalations"), userEscalations)...)
 		return
 	}
 
-	resp.State.SetAttribute(ctx, path.Root("escalations"), allEscalations)
+	accessPoliciesVal, diags := types.MapValueFrom(ctx, types.BoolType, accessPolicies)
+	resp.Diagnostics.Append(diags...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("access_policies"), accessPoliciesVal)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("escalations"), allEscalations)...)
 }
 
 // convertEscalationsToMap converts the escalations from the RavelinAccess
@@ -144,4 +160,19 @@ func convertEscalationsToMap(ctx context.Context, userAccess []iam.RavelinAccess
 	}
 
 	return allEscalations
+}
+
+func convertAccessPoliciesToMap(userAccess []iam.RavelinAccess) map[string]types.Bool {
+	accessPolicies := make(map[string]types.Bool, len(userAccess))
+	for _, access := range userAccess {
+		accessPolicies[access.Email] = boolPtrToValue(access.Gsudo.AccessPolicies)
+	}
+	return accessPolicies
+}
+
+func boolPtrToValue(value *bool) types.Bool {
+	if value == nil {
+		return types.BoolValue(false)
+	}
+	return types.BoolValue(*value)
 }
