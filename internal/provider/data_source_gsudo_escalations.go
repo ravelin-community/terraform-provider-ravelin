@@ -38,7 +38,7 @@ func (r *GsudoEscalationsDataSource) Schema(ctx context.Context, req datasource.
 				},
 			},
 			"access_policies": schema.MapAttribute{
-				MarkdownDescription: "Indicates if the user has access to modify the access policies user bindings via gsudo.",
+				MarkdownDescription: "Indicates if the user has access to switch access context policies from enforce to dry-run mode.",
 				Computed:            true,
 				ElementType:         types.BoolType,
 			},
