@@ -9,6 +9,8 @@ import (
 )
 
 func TestInheritGsudoAccess(t *testing.T) {
+	boolPtr := func(v bool) *bool { return &v }
+
 	tests := []struct {
 		name       string
 		userFile   map[string][]byte
@@ -28,16 +30,20 @@ gsudo:
   escalations:
     project1:
       - roles/owner
-`)},
+`),
+			},
 			groupFiles: map[string][]byte{
 				"groups/group1.yml": []byte(`
 gsudo:
+  access-policies: true
   escalations:
     project2:
       - roles/owner
-`)},
+`),
+			},
 			expected: GsudoAccess{
-				Inherit: true,
+				Inherit:        true,
+				AccessPolicies: boolPtr(true),
 				Escalations: map[string][]string{
 					"project1": {"roles/owner"},
 					"project2": {"roles/owner"},
@@ -56,14 +62,16 @@ gsudo:
   escalations:
     project1:
       - roles/owner
-`)},
+`),
+			},
 			groupFiles: map[string][]byte{
 				"groups/group1.yml": []byte(`
 gsudo:
   escalations:
     project2:
       - roles/owner
-`)},
+`),
+			},
 			expected: GsudoAccess{
 				Inherit: false,
 				Escalations: map[string][]string{
@@ -85,7 +93,8 @@ gsudo:
     project1:
       - roles/owner
       - roles/editor
-`)},
+`),
+			},
 			groupFiles: map[string][]byte{
 				"groups/group1.yml": []byte(`
 gsudo:
@@ -98,13 +107,35 @@ gsudo:
   escalations:
     project1:
       - roles/bigquery.admin
-`)},
+`),
+			},
 			expected: GsudoAccess{
 				Inherit: true,
 				Escalations: map[string][]string{
 					"project1": {"roles/bigquery.admin", "roles/editor", "roles/owner"},
 					"project2": {"roles/owner"},
 				},
+			},
+		},
+		{
+			name: "access_policies_override",
+			userFile: map[string][]byte{
+				"users/john_doe.yml": []byte(`
+gsudo:
+  inherit: true
+  access-policies: false
+`),
+			},
+			groupFiles: map[string][]byte{
+				"groups/group1.yml": []byte(`
+gsudo:
+  access-policies: true
+`),
+			},
+			expected: GsudoAccess{
+				Inherit:        true,
+				AccessPolicies: boolPtr(false),
+				Escalations:    map[string][]string{},
 			},
 		},
 	}

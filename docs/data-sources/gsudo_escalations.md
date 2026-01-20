@@ -44,5 +44,6 @@ output "gsudo_escalations" {
 
 ### Read-Only
 
+- `access_policies` (Map of Boolean) Indicates if the user has access to modify the access policies user bindings via gsudo.
 - `escalations` (Map of Map of List of String) Map of projects to escalation roles for each user. The key is the user email and the value is a map of project names to escalation roles.
 - `id` (String) The ID of this resource.
