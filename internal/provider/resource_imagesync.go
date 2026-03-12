@@ -21,8 +21,10 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-var _ resource.Resource = &ImageSyncResource{}
-var _ resource.ResourceWithImportState = &ImageSyncResource{}
+var (
+	_ resource.Resource                = &ImageSyncResource{}
+	_ resource.ResourceWithImportState = &ImageSyncResource{}
+)
 
 type ImageSyncResource struct{}
 
@@ -50,6 +52,10 @@ func (r *ImageSyncResource) Schema(ctx context.Context, req resource.SchemaReque
 				PlanModifiers: []planmodifier.String{
 					planmodifiers.ImageDigestModifier(),
 				},
+			},
+			"kms_key_id": schema.StringAttribute{
+				MarkdownDescription: "GCP KMS key resource ID used to cosign the image after it is mirrored, e.g. `projects/my-project/locations/global/keyRings/my-ring/cryptoKeys/my-key/cryptoKeyVersions/1`. Optional.",
+				Optional:            true,
 			},
 			"id": schema.StringAttribute{
 				MarkdownDescription: "Repository reference for the mirrored image in the destination, referenced by the image digest, rather than the tag.",
@@ -125,6 +131,18 @@ func (r *ImageSyncResource) Create(ctx context.Context, req resource.CreateReque
 	data.Id = types.StringValue(imgID)
 	data.SourceDigest = types.StringValue(srcDigest)
 
+	if !data.KmsKeyId.IsNull() && !data.KmsKeyId.IsUnknown() {
+		digestRef, err := name.NewDigest(imgID)
+		if err != nil {
+			resp.Diagnostics.AddError("failed to parse digest reference for signing", err.Error())
+			return
+		}
+		if err := image.SignImage(ctx, digestRef, data.KmsKeyId.ValueString(), googleAuth); err != nil {
+			resp.Diagnostics.AddError("failed to sign image", err.Error())
+			return
+		}
+	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -176,10 +194,33 @@ func (r *ImageSyncResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
-	// updates can only be triggered by 'source' changes that don't change the
-	// 'source_digest', suggesting a new registry/tag, but not a new underlying
-	// image. No actual update is necessary, only a state update is needed.
+	// Updates are triggered by source tag changes (same digest, different tag)
+	// or by adding/changing kms_key_id. No image copy is necessary; just
+	// propagate config changes to state and re-sign if needed.
 	state.Source = config.Source
+
+	// Capture the old key before overwriting, so the comparison below is valid.
+	oldKmsKeyId := state.KmsKeyId
+	state.KmsKeyId = config.KmsKeyId
+
+	// Re-sign if the KMS key was added or changed.
+	if !config.KmsKeyId.IsNull() && !config.KmsKeyId.IsUnknown() && !config.KmsKeyId.Equal(oldKmsKeyId) {
+		googleAuth, err := google.NewEnvAuthenticator(ctx)
+		if err != nil {
+			resp.Diagnostics.AddError("failed to create google authenticator", err.Error())
+			return
+		}
+		digestRef, err := name.NewDigest(state.Id.ValueString())
+		if err != nil {
+			resp.Diagnostics.AddError("failed to parse digest reference for signing", err.Error())
+			return
+		}
+		if err := image.SignImage(ctx, digestRef, config.KmsKeyId.ValueString(), googleAuth); err != nil {
+			resp.Diagnostics.AddError("failed to sign image", err.Error())
+			return
+		}
+	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 

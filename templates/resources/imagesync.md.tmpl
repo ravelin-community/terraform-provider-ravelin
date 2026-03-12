@@ -14,7 +14,13 @@ ability to push images to your destination registry.
 
 ## Example Usage
 
-{{ tffile (printf "examples/resources/%s/resource.tf" .Name)}}
+### Simple image mirroring
+
+{{ tffile (printf "examples/resources/%s/resource_simple.tf" .Name)}}
+
+### Image mirroring and signing
+
+{{ tffile (printf "examples/resources/%s/resource_signed.tf" .Name)}}
 
 {{ .SchemaMarkdown | trimspace }}
 

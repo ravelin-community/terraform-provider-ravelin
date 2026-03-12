@@ -8,5 +8,6 @@ type ImageSyncResourceModel struct {
 	Source       types.String `tfsdk:"source"`
 	Destination  types.String `tfsdk:"destination"`
 	SourceDigest types.String `tfsdk:"source_digest"`
+	KmsKeyId     types.String `tfsdk:"kms_key_id"`
 	Id           types.String `tfsdk:"id"`
 }
