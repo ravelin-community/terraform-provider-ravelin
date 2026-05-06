@@ -3,6 +3,7 @@ package ravelinaccess
 import (
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 )
 
@@ -37,6 +38,9 @@ func (a *RavelinAccess) InheritTwingateAccess() error {
 
 	data, err := readFile(groupFile)
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
 		return fmt.Errorf("error reading group file %s: %w", groupFile, err)
 	}
 

@@ -12,7 +12,7 @@ import (
 func readFile(filePath string) ([]byte, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("error reading file %s: %v", filePath, err)
+		return nil, fmt.Errorf("error reading file %s: %w", filePath, err)
 	}
 	if len(data) == 0 {
 		return nil, fmt.Errorf("file %s is empty", filePath)

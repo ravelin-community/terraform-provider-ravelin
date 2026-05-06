@@ -138,6 +138,28 @@ gsudo:
 				Escalations:    map[string][]string{},
 			},
 		},
+		{
+			name: "missing_group_file_is_ignored",
+			userFile: map[string][]byte{
+				"users/john_doe.yml": []byte(`
+gcp:
+  groups:
+    - missing-group
+gsudo:
+  inherit: true
+  escalations:
+    project1:
+      - roles/owner
+`),
+			},
+			groupFiles: map[string][]byte{},
+			expected: GsudoAccess{
+				Inherit: true,
+				Escalations: map[string][]string{
+					"project1": {"roles/owner"},
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
