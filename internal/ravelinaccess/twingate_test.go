@@ -105,6 +105,21 @@ twingate:
 			expEnabled: true,
 			expAdmin:   false, // overriden by the user level setting
 		},
+		{
+			name: "missing_group_file_is_ignored",
+			userFile: map[string][]byte{
+				"users/john_doe.yml": []byte(`
+gcp:
+  groups:
+    - missing-group
+twingate:
+  enabled: true
+`),
+			},
+			groupFiles: map[string][]byte{},
+			expEnabled: true,
+			expAdmin:   false,
+		},
 	}
 
 	for _, tt := range tests {
