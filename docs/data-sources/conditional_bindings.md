@@ -66,6 +66,7 @@ resource "google_project_iam_policy" "project" {
 
 - `project` (String) Name of the GCP project to fetch conditional bindings for. If not specified, the provider-level project will be used.
 - `role` (String) Role to filter conditional bindings by
+- `title` (String) Title to filter conditional bindings by
 
 ### Read-Only
 

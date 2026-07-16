@@ -15,6 +15,7 @@ func TestFilterPolicyForConditionalBindings(t *testing.T) {
 	tests := []struct {
 		name   string
 		role   string
+		title  string
 		input  *cloudresourcemanager.Policy
 		output []*cloudresourcemanager.Binding
 	}{
@@ -60,7 +61,7 @@ func TestFilterPolicyForConditionalBindings(t *testing.T) {
 			},
 		},
 		{
-			name: "should_return_conditional_binding",
+			name: "should_return_conditional_binding_by_role",
 			role: "roles/editor",
 			input: &cloudresourcemanager.Policy{
 				Bindings: []*cloudresourcemanager.Binding{
@@ -68,7 +69,7 @@ func TestFilterPolicyForConditionalBindings(t *testing.T) {
 						Role:    "roles/servicenetworking.serviceAgent",
 						Members: []string{"serviceAccount:account-a@gcp-project.iam.gserviceaccount.com"},
 						Condition: &cloudresourcemanager.Expr{
-							Title:      "test",
+							Title:      "condition-a",
 							Expression: "test",
 						},
 					},
@@ -76,7 +77,7 @@ func TestFilterPolicyForConditionalBindings(t *testing.T) {
 						Role:    "roles/editor",
 						Members: []string{"serviceAccount:account-a@gcp-project.iam.gserviceaccount.com"},
 						Condition: &cloudresourcemanager.Expr{
-							Title:      "test",
+							Title:      "condition-b",
 							Expression: "test",
 						},
 					},
@@ -87,11 +88,105 @@ func TestFilterPolicyForConditionalBindings(t *testing.T) {
 					Role:    "roles/editor",
 					Members: []string{"serviceAccount:account-a@gcp-project.iam.gserviceaccount.com"},
 					Condition: &cloudresourcemanager.Expr{
-						Title:      "test",
+						Title:      "condition-b",
 						Expression: "test",
 					},
 				},
 			},
+		},
+		{
+			name:  "should_return_conditional_binding_by_title",
+			title: "condition-a",
+			input: &cloudresourcemanager.Policy{
+				Bindings: []*cloudresourcemanager.Binding{
+					{
+						Role:    "roles/servicenetworking.serviceAgent",
+						Members: []string{"serviceAccount:account-a@gcp-project.iam.gserviceaccount.com"},
+						Condition: &cloudresourcemanager.Expr{
+							Title:      "condition-a",
+							Expression: "test",
+						},
+					},
+					{
+						Role:    "roles/editor",
+						Members: []string{"serviceAccount:account-b@gcp-project.iam.gserviceaccount.com"},
+						Condition: &cloudresourcemanager.Expr{
+							Title:      "condition-b",
+							Expression: "test",
+						},
+					},
+				},
+			},
+			output: []*cloudresourcemanager.Binding{
+				{
+					Role:    "roles/servicenetworking.serviceAgent",
+					Members: []string{"serviceAccount:account-a@gcp-project.iam.gserviceaccount.com"},
+					Condition: &cloudresourcemanager.Expr{
+						Title:      "condition-a",
+						Expression: "test",
+					},
+				},
+			},
+		},
+		{
+			name:  "should_return_conditional_binding_by_role_and_title",
+			role:  "roles/editor",
+			title: "condition-b",
+			input: &cloudresourcemanager.Policy{
+				Bindings: []*cloudresourcemanager.Binding{
+					{
+						Role:    "roles/editor",
+						Members: []string{"serviceAccount:account-a@gcp-project.iam.gserviceaccount.com"},
+						Condition: &cloudresourcemanager.Expr{
+							Title:      "condition-a",
+							Expression: "test",
+						},
+					},
+					{
+						Role:    "roles/editor",
+						Members: []string{"serviceAccount:account-b@gcp-project.iam.gserviceaccount.com"},
+						Condition: &cloudresourcemanager.Expr{
+							Title:      "condition-b",
+							Expression: "test",
+						},
+					},
+					{
+						Role:    "roles/viewer",
+						Members: []string{"serviceAccount:account-c@gcp-project.iam.gserviceaccount.com"},
+						Condition: &cloudresourcemanager.Expr{
+							Title:      "condition-b",
+							Expression: "test",
+						},
+					},
+				},
+			},
+			output: []*cloudresourcemanager.Binding{
+				{
+					Role:    "roles/editor",
+					Members: []string{"serviceAccount:account-b@gcp-project.iam.gserviceaccount.com"},
+					Condition: &cloudresourcemanager.Expr{
+						Title:      "condition-b",
+						Expression: "test",
+					},
+				},
+			},
+		},
+		{
+			name:  "should_return_empty_array_when_title_does_not_match",
+			title: "missing-title",
+			input: &cloudresourcemanager.Policy{
+				Bindings: []*cloudresourcemanager.Binding{
+					{
+						Role:    "roles/editor",
+						Members: []string{"serviceAccount:account-a@gcp-project.iam.gserviceaccount.com"},
+						Condition: &cloudresourcemanager.Expr{
+							Title:      "condition-a",
+							Expression: "test",
+						},
+					},
+				},
+			},
+			output: []*cloudresourcemanager.Binding{},
 		},
 		{
 			name: "should_return_empty_array",
@@ -105,7 +200,7 @@ func TestFilterPolicyForConditionalBindings(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, _ := filterPolicyForConditionalBindings(tt.input, tt.role)
+			got, _ := filterPolicyForConditionalBindings(tt.input, tt.role, tt.title)
 			if diff := cmp.Diff(tt.output, got); diff != "" {
 				t.Fatalf("Expected (-) but got (+):\n%s", diff)
 			}

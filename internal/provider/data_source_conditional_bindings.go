@@ -36,6 +36,10 @@ func (r *ConditionalBindingsDataSource) Schema(ctx context.Context, req datasour
 				MarkdownDescription: "Role to filter conditional bindings by",
 				Optional:            true,
 			},
+			"title": schema.StringAttribute{
+				MarkdownDescription: "Title to filter conditional bindings by",
+				Optional:            true,
+			},
 			"bindings": schema.ListNestedAttribute{
 				MarkdownDescription: "Conditional bindings",
 				Computed:            true,
@@ -117,6 +121,7 @@ func (d *ConditionalBindingsDataSource) Read(ctx context.Context, req datasource
 	}
 
 	role := data.Role.ValueString()
+	title := data.Title.ValueString()
 
 	var c google.Config
 	err := c.NewCloudResourceManagerService(ctx)
@@ -131,7 +136,7 @@ func (d *ConditionalBindingsDataSource) Read(ctx context.Context, req datasource
 		return
 	}
 
-	conditionalBindings, err := filterPolicyForConditionalBindings(policy, role)
+	conditionalBindings, err := filterPolicyForConditionalBindings(policy, role, title)
 	if err != nil {
 		resp.Diagnostics.AddError("error filtering policy", err.Error())
 		return
@@ -187,7 +192,7 @@ func newConditionalBindingList(ctx context.Context, in []*cloudresourcemanager.B
 }
 
 // extract all conditional bindings from the IAM policy
-func filterPolicyForConditionalBindings(policy *cloudresourcemanager.Policy, role string) ([]*cloudresourcemanager.Binding, error) {
+func filterPolicyForConditionalBindings(policy *cloudresourcemanager.Policy, role, title string) ([]*cloudresourcemanager.Binding, error) {
 	conditionalBindings := []*cloudresourcemanager.Binding{}
 	for _, b := range policy.Bindings {
 		if role != "" && role != b.Role {
@@ -195,6 +200,10 @@ func filterPolicyForConditionalBindings(policy *cloudresourcemanager.Policy, rol
 		}
 
 		if b.Condition == nil {
+			continue
+		}
+
+		if title != "" && title != b.Condition.Title {
 			continue
 		}
 
