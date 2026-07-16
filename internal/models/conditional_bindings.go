@@ -8,6 +8,7 @@ import (
 type ConditionalBindingsDataSourceModel struct {
 	Project  types.String `tfsdk:"project"`
 	Role     types.String `tfsdk:"role"`
+	Title    types.String `tfsdk:"title"`
 	Bindings types.List   `tfsdk:"bindings"`
 	Id       types.String `tfsdk:"id"`
 }
