@@ -77,6 +77,9 @@ func (p *ravelinProvider) DataSources(_ context.Context) []func() datasource.Dat
 		func() datasource.DataSource {
 			return &TwingateAccessDataSource{}
 		},
+		func() datasource.DataSource {
+			return &AgentIdentitiesDataSource{}
+		},
 	}
 }
 
