@@ -1,0 +1,34 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+{{ .Description | trimspace }}
+
+When `agent_name` is omitted, the data source returns a `principalSet://` covering all agents
+running in the project — useful for granting permissions broadly. When `agent_name` is provided
+along with `location`, the data source looks up the specific reasoning engine by display name and
+returns its unique `principal://` identity, scoped to that single agent.
+
+## Example Usage
+
+{{ tffile (printf "examples/data-sources/%s/data-source.tf" .Name)}}
+
+{{ .SchemaMarkdown | trimspace }}
+
+## Usage Notes
+
+**Generic vs agent-specific identity**
+
+Without `agent_name`, `identity` is a principal set that matches any agent running in the project.
+With `agent_name` and `location`, `identity` is a principal scoped to that exact reasoning engine.
+Use the specific form when you want to grant permissions to one agent without affecting others.
+
+**Display name uniqueness**
+
+The lookup fails if more than one reasoning engine in the project and location shares the same
+display name. Ensure display names are unique within a location before using this data source.

@@ -35,4 +35,6 @@ provider "ravelin" {
 
 ### Optional
 
+- `location` (String) GCP location used by default for all resources
+- `organization_id` (String) GCP organization ID used by default for all resources
 - `project` (String) GCP project name used by default for all resources

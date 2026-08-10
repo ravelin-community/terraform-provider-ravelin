@@ -4,11 +4,13 @@ import (
 	"context"
 	"strconv"
 
+	"google.golang.org/api/aiplatform/v1"
 	"google.golang.org/api/cloudresourcemanager/v1"
 )
 
 type Config struct {
 	CloudResourceManagerService *cloudresourcemanager.Service
+	AiplatformService           *aiplatform.Service
 }
 
 func (c *Config) NewCloudResourceManagerService(ctx context.Context) error {
@@ -27,7 +29,6 @@ func (c *Config) GetProjectIAMPolicy(projectID string) (*cloudresourcemanager.Po
 		},
 	}
 	policy, err := c.CloudResourceManagerService.Projects.GetIamPolicy(projectID, &request).Do()
-
 	if err != nil {
 		return nil, err
 	}
