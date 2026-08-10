@@ -3,8 +3,10 @@ package models
 import "github.com/hashicorp/terraform-plugin-framework/types"
 
 type AgentIdentitiesDataSourceModel struct {
-	Project             types.String `tfsdk:"project"`
-	Role                types.String `tfsdk:"role"`
-	AgentIdentityPolicy types.String `tfsdk:"agent_identity_policy"`
-	Id                  types.String `tfsdk:"id"`
+	OrganizationId types.String `tfsdk:"organization_id"`
+	Project        types.String `tfsdk:"project"`
+	AgentName      types.String `tfsdk:"agent_name"`
+	Location       types.String `tfsdk:"location"`
+	Identity       types.String `tfsdk:"identity"`
+	Id             types.String `tfsdk:"id"`
 }

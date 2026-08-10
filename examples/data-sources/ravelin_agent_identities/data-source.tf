@@ -1,48 +1,25 @@
-data "ravelin_agent_identities" "example" {
+# Generic identity pool for all agents in the project
+data "ravelin_agent_identities" "project_pool" {
+  project         = "my-project"
+  organization_id = "123456789012"
+}
+
+resource "google_project_iam_member" "agent_pool_binding" {
   project = "my-project"
+  role    = "roles/storage.objectViewer"
+  member  = data.ravelin_agent_identities.project_pool.identity
 }
 
-
-locals {
-  agent_identity_policy = jsondecode(
-    data.ravelin_agent_identities.example.agent_identity_policy
-  )
-
-  my_project_policy = {
-    "roles/editor" = [
-      "user:john.doe@email.com",
-      "serviceAccount:service-a@my-project.iam.gserviceaccount",
-    ],
-    "roles/bigquery.admin" = [
-      "user:alice.bob@email.com"
-    ]
-  }
-
-  combined_policy = { for role in distinct(
-    concat(
-      keys(local.agent_identity_policy),
-      keys(local.my_project_policy),
-    )
-    ) : role =>
-    concat(
-      lookup(local.agent_identity_policy, role, []),
-      lookup(local.my_project_policy, role, []),
-    )
-  }
+# Unique identity for a specific named agent
+data "ravelin_agent_identities" "my_agent" {
+  project         = "my-project"
+  organization_id = "123456789012"
+  agent_name      = "my-test-agent"
+  location        = "us-central1"
 }
 
-data "google_iam_policy" "project" {
-  dynamic "binding" {
-    for_each = local.combined_policy
-
-    content {
-      role    = binding.key
-      members = binding.value
-    }
-  }
-}
-
-resource "google_project_iam_policy" "project" {
-  project     = "my-project"
-  policy_data = data.google_iam_policy.project.policy_data
+resource "google_project_iam_member" "my_agent_binding" {
+  project = "my-project"
+  role    = "roles/bigquery.dataViewer"
+  member  = data.ravelin_agent_identities.my_agent.identity
 }

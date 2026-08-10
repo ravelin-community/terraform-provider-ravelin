@@ -13,12 +13,16 @@ import (
 var _ provider.Provider = &ravelinProvider{}
 
 type ravelinProvider struct {
-	version string
-	project string
+	version        string
+	project        string
+	organizationId string
+	location       string
 }
 
 type ravelinProviderModel struct {
-	Project types.String `tfsdk:"project"`
+	Project        types.String `tfsdk:"project"`
+	OrganizationId types.String `tfsdk:"organization_id"`
+	Location       types.String `tfsdk:"location"`
 }
 
 func (p *ravelinProvider) Metadata(_ context.Context, _ provider.MetadataRequest, resp *provider.MetadataResponse) {
@@ -31,6 +35,14 @@ func (p *ravelinProvider) Schema(_ context.Context, _ provider.SchemaRequest, re
 		Attributes: map[string]schema.Attribute{
 			"project": schema.StringAttribute{
 				MarkdownDescription: "GCP project name used by default for all resources",
+				Optional:            true,
+			},
+			"organization_id": schema.StringAttribute{
+				MarkdownDescription: "GCP organization ID used by default for all resources",
+				Optional:            true,
+			},
+			"location": schema.StringAttribute{
+				MarkdownDescription: "GCP location used by default for all resources",
 				Optional:            true,
 			},
 		},
@@ -48,6 +60,14 @@ func (p *ravelinProvider) Configure(ctx context.Context, req provider.ConfigureR
 
 	if !config.Project.IsNull() {
 		p.project = config.Project.ValueString()
+	}
+
+	if !config.OrganizationId.IsNull() {
+		p.organizationId = config.OrganizationId.ValueString()
+	}
+
+	if !config.Location.IsNull() {
+		p.location = config.Location.ValueString()
 	}
 
 	// Make the provider available to data sources and resources

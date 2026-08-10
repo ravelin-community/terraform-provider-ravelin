@@ -2,75 +2,48 @@
 page_title: "ravelin_agent_identities Data Source - terraform-provider-ravelin"
 subcategory: ""
 description: |-
-  Get all agent identities contained in a project level IAM policy.
-  Use this data source to get all the GCP agent identities (principal sets) that have role bindings in your project level IAM policy. These are identities automatically created when deploying agents through the AI Platform in GCP. These bindings can then be added to a google_project_iam_policy resource.
+  Get the GCP agent identity for a project or a specific agent.
+  Use this data source to get the GCP agent identity (principal or principal set) for use in IAM bindings. When agent_name is specified, returns the unique identity for that specific agent. Otherwise returns the generic identity pool for all agents in the project.
 ---
 
 # ravelin_agent_identities (Data Source)
 
-Get all agent identities contained in a project level IAM policy.
+Get the GCP agent identity for a project or a specific agent.
 
-Use this data source to get all the GCP agent identities (principal sets) that have role bindings in your project level IAM policy. These are identities automatically created when deploying agents through the AI Platform in GCP. These bindings can then be added to a `google_project_iam_policy` resource.
+Use this data source to get the GCP agent identity (principal or principal set) for use in IAM bindings. When agent_name is specified, returns the unique identity for that specific agent. Otherwise returns the generic identity pool for all agents in the project.
 
-This data source is particularly useful when you don't want to manage GCP agent
-identities being added in your authoritative policies and take the risk of
-removing bindings which can break your AI Platform deployments. This provides a
-way of ignoring these changes.
-
--> **Note** On its own this data is pretty useless, you need to combine these
-agent identities with your own policy bindings and apply these changes through a
-`google_project_iam_policy` resource. See example below for more details.
+When `agent_name` is omitted, the data source returns a `principalSet://` covering all agents
+running in the project — useful for granting permissions broadly. When `agent_name` is provided
+along with `location`, the data source looks up the specific reasoning engine by display name and
+returns its unique `principal://` identity, scoped to that single agent.
 
 ## Example Usage
 
 ```terraform
-data "ravelin_agent_identities" "example" {
+# Generic identity pool for all agents in the project
+data "ravelin_agent_identities" "project_pool" {
+  project         = "my-project"
+  organization_id = "123456789012"
+}
+
+resource "google_project_iam_member" "agent_pool_binding" {
   project = "my-project"
+  role    = "roles/storage.objectViewer"
+  member  = data.ravelin_agent_identities.project_pool.identity
 }
 
-
-locals {
-  agent_identity_policy = jsondecode(
-    data.ravelin_agent_identities.example.agent_identity_policy
-  )
-
-  my_project_policy = {
-    "roles/editor" = [
-      "user:john.doe@email.com",
-      "serviceAccount:service-a@my-project.iam.gserviceaccount",
-    ],
-    "roles/bigquery.admin" = [
-      "user:alice.bob@email.com"
-    ]
-  }
-
-  combined_policy = { for role in distinct(
-    concat(
-      keys(local.agent_identity_policy),
-      keys(local.my_project_policy),
-    )
-    ) : role =>
-    concat(
-      lookup(local.agent_identity_policy, role, []),
-      lookup(local.my_project_policy, role, []),
-    )
-  }
+# Unique identity for a specific named agent
+data "ravelin_agent_identities" "my_agent" {
+  project         = "my-project"
+  organization_id = "123456789012"
+  agent_name      = "my-test-agent"
+  location        = "us-central1"
 }
 
-data "google_iam_policy" "project" {
-  dynamic "binding" {
-    for_each = local.combined_policy
-
-    content {
-      role    = binding.key
-      members = binding.value
-    }
-  }
-}
-
-resource "google_project_iam_policy" "project" {
-  project     = "my-project"
-  policy_data = data.google_iam_policy.project.policy_data
+resource "google_project_iam_member" "my_agent_binding" {
+  project = "my-project"
+  role    = "roles/bigquery.dataViewer"
+  member  = data.ravelin_agent_identities.my_agent.identity
 }
 ```
 
@@ -79,18 +52,25 @@ resource "google_project_iam_policy" "project" {
 
 ### Optional
 
+- `agent_name` (String) Display name of the agent to fetch the unique identity for. If not specified, the generic agent identity pool for the project will be returned.
+- `location` (String) GCP location of the agent (e.g. us-central1). Required when agent_name is specified. If not specified, the provider-level location will be used.
+- `organization_id` (String) Organization ID to fetch agent identities for. If not specified, the provider-level organization_id will be used.
 - `project` (String) Name of the GCP project to fetch agent identities for. If not specified, the provider-level project will be used.
-- `role` (String) Role to filter agent identity bindings by. If not specified, all roles are returned.
 
 ### Read-Only
 
-- `agent_identity_policy` (String) IAM policy JSON encoded as a string of all agent identity bindings
 - `id` (String) The ID of this resource.
+- `identity` (String) The agent identity principal
 
 ## Usage Notes
 
-**Agent identities across different projects**
+**Generic vs agent-specific identity**
 
-The data resource will only return agent identities intended to be used with your
-current project. All other agent identities from different projects won't be added
-to the output if they are part of the project IAM policy.
+Without `agent_name`, `identity` is a principal set that matches any agent running in the project.
+With `agent_name` and `location`, `identity` is a principal scoped to that exact reasoning engine.
+Use the specific form when you want to grant permissions to one agent without affecting others.
+
+**Display name uniqueness**
+
+The lookup fails if more than one reasoning engine in the project and location shares the same
+display name. Ensure display names are unique within a location before using this data source.

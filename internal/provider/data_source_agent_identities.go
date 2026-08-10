@@ -2,19 +2,14 @@ package provider
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"regexp"
-	"strconv"
-	"time"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/ravelin-community/terraform-provider-ravelin/internal/google"
 	"github.com/ravelin-community/terraform-provider-ravelin/internal/models"
-
-	"google.golang.org/api/cloudresourcemanager/v1"
 )
 
 var _ datasource.DataSource = &AgentIdentitiesDataSource{}
@@ -34,23 +29,31 @@ func (r *AgentIdentitiesDataSource) Schema(ctx context.Context, req datasource.S
 				MarkdownDescription: "Name of the GCP project to fetch agent identities for. If not specified, the provider-level project will be used.",
 				Optional:            true,
 			},
-			"role": schema.StringAttribute{
-				MarkdownDescription: "Role to filter agent identity bindings by. If not specified, all roles are returned.",
+			"organization_id": schema.StringAttribute{
+				MarkdownDescription: "Organization ID to fetch agent identities for. If not specified, the provider-level organization_id will be used.",
 				Optional:            true,
 			},
-			"agent_identity_policy": schema.StringAttribute{
-				MarkdownDescription: "IAM policy JSON encoded as a string of all agent identity bindings",
+			"agent_name": schema.StringAttribute{
+				MarkdownDescription: "Display name of the agent to fetch the unique identity for. If not specified, the generic agent identity pool for the project will be returned.",
+				Optional:            true,
+			},
+			"location": schema.StringAttribute{
+				MarkdownDescription: "GCP location of the agent (e.g. us-central1). Required when agent_name is specified. If not specified, the provider-level location will be used.",
+				Optional:            true,
+			},
+			"identity": schema.StringAttribute{
+				MarkdownDescription: "The agent identity principal",
 				Computed:            true,
 			},
 			"id": schema.StringAttribute{
 				Computed: true,
 			},
 		},
-		MarkdownDescription: "Get all agent identities contained in a project level IAM policy.\n\n" +
-			"Use this data source to get all the GCP agent identities (principal sets) " +
-			"that have role bindings in your project level IAM policy. These are identities " +
-			"automatically created when deploying agents through the AI Platform in GCP. " +
-			"These bindings can then be added to a `google_project_iam_policy` resource.",
+		MarkdownDescription: "Get the GCP agent identity for a project or a specific agent.\n\n" +
+			"Use this data source to get the GCP agent identity (principal or principal set) " +
+			"for use in IAM bindings. When agent_name is specified, returns the unique identity " +
+			"for that specific agent. Otherwise returns the generic identity pool for all agents " +
+			"in the project.",
 	}
 }
 
@@ -89,76 +92,72 @@ func (d *AgentIdentitiesDataSource) Read(ctx context.Context, req datasource.Rea
 		return
 	}
 
-	var c google.Config
-	err := c.NewCloudResourceManagerService(ctx)
-	if err != nil {
-		resp.Diagnostics.AddError("error creating cloud resource manager client", err.Error())
+	organizationId := data.OrganizationId.ValueString()
+	if organizationId == "" && d.provider != nil {
+		organizationId = d.provider.organizationId
+	}
+
+	if organizationId == "" {
+		resp.Diagnostics.AddError(
+			"Missing Organization ID",
+			"The organization_id attribute is required when not specified in the provider configuration.",
+		)
 		return
 	}
 
-	policy, err := c.GetProjectIAMPolicy(project)
-	if err != nil {
-		resp.Diagnostics.AddError(fmt.Sprintf("error fetching project policy %s", project), err.Error())
+	agentName := data.AgentName.ValueString()
+
+	var c google.Config
+
+	if err := c.NewCloudResourceManagerService(ctx); err != nil {
+		resp.Diagnostics.AddError("Failed to create Cloud Resource Manager client", err.Error())
 		return
 	}
+
 	projectNumber, err := c.GetProjectIDNumber(project)
 	if err != nil {
-		resp.Diagnostics.AddError("error fetching project number", err.Error())
+		resp.Diagnostics.AddError("Failed to get project number", err.Error())
 		return
 	}
 
-	role := data.Role.ValueString()
+	if agentName == "" {
+		identity := fmt.Sprintf("principalSet://agents.global.org-%s.system.id.goog/attribute.platformContainer/aiplatform/projects/%s", organizationId, projectNumber)
+		data.Identity = types.StringValue(identity)
+	} else {
+		location := data.Location.ValueString()
+		if location == "" && d.provider != nil {
+			location = d.provider.location
+		}
 
-	agentIdentities, err := filterAgentIdentities(policy, projectNumber, role)
-	if err != nil {
-		resp.Diagnostics.AddError("error filtering policy", err.Error())
-		return
+		if location == "" {
+			resp.Diagnostics.AddError(
+				"Missing Location",
+				"The location attribute is required when agent_name is specified, or set at the provider level.",
+			)
+			return
+		}
+
+		if err := c.NewAiplatformService(ctx, location); err != nil {
+			resp.Diagnostics.AddError("Failed to create AI Platform client", err.Error())
+			return
+		}
+
+		engine, err := c.GetReasoningEngineByDisplayName(ctx, project, location, agentName)
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to find reasoning engine", err.Error())
+			return
+		}
+
+		// engine.Name is projects/{project}/locations/{location}/reasoningEngines/{engine_id}
+		parts := strings.Split(engine.Name, "/")
+		engineID := parts[len(parts)-1]
+
+		identity := fmt.Sprintf(
+			"principal://agents.global.org-%s.system.id.goog/resources/aiplatform/projects/%s/locations/%s/reasoningEngines/%s",
+			organizationId, projectNumber, location, engineID,
+		)
+		data.Identity = types.StringValue(identity)
 	}
-
-	agentIdentityPolicy, err := json.Marshal(agentIdentities)
-	if err != nil {
-		resp.Diagnostics.AddError("error encoding agent identities to json", err.Error())
-		return
-	}
-
-	data.AgentIdentityPolicy = types.StringValue(string(agentIdentityPolicy))
-	data.Id = types.StringValue(strconv.FormatInt(time.Now().Unix(), 10))
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
-}
-
-// filterAgentIdentities extracts agent identity principal sets from the IAM policy.
-// These are identities created when deploying agents through the AI Platform in GCP.
-// Example format: principalSet://agents.global.org-743276511950.system.id.goog/attribute.platformContainer/aiplatform/projects/308055776777
-func filterAgentIdentities(policy *cloudresourcemanager.Policy, projectNumber, role string) (map[string][]string, error) {
-	// Match agent identity principal sets containing the project number
-	// Format: principalSet://agents.global.org-<org_number>.system.id.goog/attribute.platformContainer/aiplatform/projects/<project_number>
-	pattern := fmt.Sprintf(`^principalSet://agents\.global\.org-\d+\.system\.id\.goog/attribute\.platformContainer/aiplatform/projects/%s$`, projectNumber)
-	r, err := regexp.Compile(pattern)
-	if err != nil {
-		return nil, err
-	}
-
-	agentIdentities := map[string][]string{}
-
-	for _, b := range policy.Bindings {
-		// Filter by role if specified
-		if role != "" && b.Role != role {
-			continue
-		}
-
-		for _, member := range b.Members {
-			// Ignore conditional bindings
-			if b.Condition != nil {
-				continue
-			}
-
-			// Check if member matches the agent identity pattern
-			if r.MatchString(member) {
-				agentIdentities[b.Role] = append(agentIdentities[b.Role], member)
-			}
-		}
-	}
-
-	return agentIdentities, nil
 }

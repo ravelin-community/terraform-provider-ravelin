@@ -9,14 +9,10 @@ description: |-
 
 {{ .Description | trimspace }}
 
-This data source is particularly useful when you don't want to manage GCP agent
-identities being added in your authoritative policies and take the risk of
-removing bindings which can break your AI Platform deployments. This provides a
-way of ignoring these changes.
-
--> **Note** On its own this data is pretty useless, you need to combine these
-agent identities with your own policy bindings and apply these changes through a
-`google_project_iam_policy` resource. See example below for more details.
+When `agent_name` is omitted, the data source returns a `principalSet://` covering all agents
+running in the project — useful for granting permissions broadly. When `agent_name` is provided
+along with `location`, the data source looks up the specific reasoning engine by display name and
+returns its unique `principal://` identity, scoped to that single agent.
 
 ## Example Usage
 
@@ -26,8 +22,13 @@ agent identities with your own policy bindings and apply these changes through a
 
 ## Usage Notes
 
-**Agent identities across different projects**
+**Generic vs agent-specific identity**
 
-The data resource will only return agent identities intended to be used with your
-current project. All other agent identities from different projects won't be added
-to the output if they are part of the project IAM policy.
+Without `agent_name`, `identity` is a principal set that matches any agent running in the project.
+With `agent_name` and `location`, `identity` is a principal scoped to that exact reasoning engine.
+Use the specific form when you want to grant permissions to one agent without affecting others.
+
+**Display name uniqueness**
+
+The lookup fails if more than one reasoning engine in the project and location shares the same
+display name. Ensure display names are unique within a location before using this data source.
